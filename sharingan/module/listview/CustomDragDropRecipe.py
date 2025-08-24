@@ -1,28 +1,46 @@
 from PyQt5.QtCore import QDataStream, Qt
-from PyQt5.QtWidgets import (QListWidget, QListWidgetItem, QAbstractItemView)
-from sharingan.module.panel.listview.CustomItemAES import CustomItemAES
-from sharingan.module.panel.listview.CustomItemBase64 import CustomItemBase64
-from sharingan.module.panel.listview.CustomItemRC4 import CustomItemRC4
-from sharingan.module.panel.listview.CustomItemRSA import CustomItemRSA
-from sharingan.module.panel.listview.CustomItemSalsa20 import CustomItemSalsa20
-from sharingan.module.panel.listview.CustomItemXOR import CustomItemXOR
-from sharingan.module.panel.listview.CustomItemAdd import CustomItemAdd
-from sharingan.module.panel.listview.CustomItemSub import CustomItemSub
+from PyQt5.QtGui import QDrag
+from PyQt5.QtWidgets import (QListWidget, QListWidgetItem, QAbstractItemView, QListView)
+from sharingan.module.listview.Substitutions import Substitutions
+from sharingan.module.listview.APIHammering import APIHammering
+from sharingan.module.listview.Scatter import Scatter
+from sharingan.module.listview.DeadCode import DeadCode
+from sharingan.module.listview.DeadLoop import DeadLoop
+from sharingan.module.listview.Irrelevant import Irrelevant
+from sharingan.module.listview.JmpClean import JmpClean
+from sharingan.module.listview.Usercall import Usercall
 
 
 class CustomDragDropRecipe(QListWidget):
     def __init__(self, parent=None):
         super(CustomDragDropRecipe, self).__init__(parent)
-        self.setDragDropMode(QAbstractItemView.InternalMove)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self.setDefaultDropAction(Qt.MoveAction)
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+        self.setSelectionMode(QListView.ExtendedSelection)
 
 
     def dragEnterEvent(self, event):
         mime = event.mimeData()
-        if (mime.hasText() or
-                mime.hasFormat('application/x-qabstractitemmodeldatalist')):
+        if (mime.hasText() or mime.hasFormat('application/x-qabstractitemmodeldatalist')):
             event.accept()
         else:
             event.ignore()
+
+    def startDrag(self, event):
+            item = self.currentItem()
+            if item is None:
+                return
+            row = self.row(item)
+            mime = self.mimeData([item])
+            mime.setText(str(row))
+            drag = QDrag(self)
+            drag.setMimeData(mime)
+            drop_action = drag.exec(Qt.MoveAction)
+            if drop_action != Qt.MoveAction:
+                self.takeItem(row)
+                # print(f"Remove {row}")
 
     def dropEvent(self, event):
         mime = event.mimeData()
@@ -52,27 +70,20 @@ class CustomDragDropRecipe(QListWidget):
                 self.setItemWidget(list_adapter_item, obj_algorithm)
             # Reorder by drag and drop
             else:
-                # print('Reorder')
-                if ((self.row(self.itemAt(event.pos())) == self.currentRow() + 1) or (self.currentRow() == self.count() - 1)):
+                if (self.row(self.itemAt(event.pos())) == self.currentRow() + 1):
                     event.ignore()
                 else:
                     super(CustomDragDropRecipe, self).dropEvent(event)
 
-    # def dragMoveEvent(self, event):
-    #     if ((self.row(self.itemAt(event.pos())) == self.currentRow() + 1) or (self.currentRow() == self.count() - 1)):
-    #         event.ignore()
-    #     else:
-    #         super(CustomDragDropRecipe, self).dragMoveEvent(event)
-
     def classify_algorithm(self, algorithm):
         switcher = {
-            'AES': CustomItemAES(),
-            'Base64': CustomItemBase64(),
-            'RC4': CustomItemRC4(),
-            'RSA': CustomItemRSA(),
-            'Salsa20': CustomItemSalsa20(),
-            'XOR': CustomItemXOR(),
-            'Add': CustomItemAdd(),
-            'Sub': CustomItemSub()
+            'Substitutions': Substitutions(),
+            'APIHammering': APIHammering(),
+            'Scatter': Scatter(),
+            'DeadCode': DeadCode(),
+            'DeadLoop': DeadLoop(),
+            'Irrelevant': Irrelevant(),
+            'JmpClean': JmpClean(),
+            'Usercall': Usercall()
         }
         return switcher.get(algorithm, 'nothing')

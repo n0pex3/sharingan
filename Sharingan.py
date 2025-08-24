@@ -1,12 +1,11 @@
 import idaapi
 from sharingan.main_layout import MainWindow
-from PyQt5.QtWidgets import QVBoxLayout
+from  sharingan.module import StylesManager
 
 
 class PluginPanel(idaapi.PluginForm):
     def __init__(self):
         super().__init__()
-
 
     """Panel for the IDA GUI."""
     def OnCreate(self, form):
@@ -15,7 +14,7 @@ class PluginPanel(idaapi.PluginForm):
 
 class Sharingan(idaapi.plugin_t):
     flags = idaapi.PLUGIN_KEEP
-    comment = 'Mass strings decryption plugin'
+    comment = 'Assist and ease deobfuscation'
     wanted_name = 'Sharingan'
     wanted_hotkey = ''
     help = ''
@@ -30,6 +29,7 @@ class Sharingan(idaapi.plugin_t):
         idaapi.msg('Running ' + self.wanted_name + '\n')
         self.sharingan_gui = PluginPanel()
         self.sharingan_gui.Show('Sharingan')
+        StylesManager.load_stylesheet()
     
     def term(self):
         pass

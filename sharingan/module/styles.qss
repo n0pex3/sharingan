@@ -1,0 +1,61 @@
+QWidget#list_operation {
+    font-size: 22pt;
+    color: rgb(77, 134, 169);
+}
+
+QListWidget#list_operation::item:selected {
+    background: rgb(216, 231, 241);
+}
+
+QListWidget#list_operation::item {
+    border-bottom: 1px solid rgb(194, 231, 240);
+    background-color: #dcecf6;
+    padding: 10px;
+}
+
+QListWidget#list_recipe::item {
+    border-bottom: 1px solid rgb(215, 231, 195);
+    background-color: rgb(226, 239, 218)
+}
+
+QListWidget#list_recipe::item:selected {
+    background: lightgreen;
+}
+
+QLabel#item_recipe {
+    font-weight: bold; 
+    font-size: 14pt;  
+    color: rgb(87, 133, 78)
+}
+
+QSplitter::handle {
+    background-color: #ccc;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+QTabWidget#disassembler QTabBar::tab {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin-left: 10px;
+    min-width: 80px;
+}
+
+QTabWidget#disassembler QTabBar::tab:selected {
+    background: #ffffff;
+    border: 1px solid #aaa;
+}
+
+QTabWidget#disassembler QTabBar::tab:!selected {
+    background: #e0e0e0;
+}
+
+QTabWidget#disassembler::pane {
+    border: 1px solid #000;
+    background: white;
+    margin: 10px;
+}
