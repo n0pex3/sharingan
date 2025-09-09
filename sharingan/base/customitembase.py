@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
 from abc import abstractmethod
 from sharingan.core import stylesmanager
 
+
 class CustomItemBase(QWidget):
     def __init__(self, parent=None):
         super(CustomItemBase, self).__init__(parent)

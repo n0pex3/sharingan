@@ -6,6 +6,7 @@ from sharingan.core.contextmenu import InitHookMenu
 class PluginPanel(idaapi.PluginForm):
     def __init__(self):
         super().__init__()
+        self.main_layout = None
 
     """Panel for the IDA GUI."""
     def OnCreate(self, form):
@@ -31,6 +32,8 @@ class Sharingan(idaapi.plugin_t):
         self.sharingan_gui = PluginPanel()
         self.sharingan_gui.Show('Sharingan')
         stylesmanager.load_stylesheet()
+        recipe = self.sharingan_gui.main_layout.recipe
+        self.hook_menu.register_recipe(recipe)
     
     def term(self):
         self.hook_menu.cleanup()
