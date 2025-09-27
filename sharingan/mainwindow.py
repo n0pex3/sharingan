@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QHBoxLayout, QMainWindow, QSplitter
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QSplitter
+from PySide6.QtCore import Qt
 from sharingan.core import stylesmanager
 from sharingan.core.operation import Operation
 from sharingan.core.recipe import Recipe

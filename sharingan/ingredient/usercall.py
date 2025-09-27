@@ -1,6 +1,6 @@
-from sharingan.base.customitembase import CustomItemBase
+from sharingan.base.itemlist import ItemList
 
-class Usercall(CustomItemBase):
+class Usercall(ItemList):
     def __init__(self, parent=None):
         super(Usercall, self).__init__(parent)
         self.set_label_text('Usercall')

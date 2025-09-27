@@ -1,6 +1,6 @@
-from sharingan.base.customitembase import CustomItemBase
+from sharingan.base.itemlist import ItemList
 
-class DeadCode(CustomItemBase):
+class DeadCode(ItemList):
     def __init__(self, parent=None):
         super(DeadCode, self).__init__(parent)
         self.set_label_text('DeadCode')

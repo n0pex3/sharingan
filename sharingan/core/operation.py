@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QAbstractItemView, QListWidget
-import PyQt5.QtWidgets as QtWidgets
+from PySide6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QAbstractItemView, QListWidget, QCheckBox
+import PySide6.QtWidgets as QtWidgets
 from sharingan.core import stylesmanager
 import idaapi
 import sys, os
@@ -16,8 +16,11 @@ class Operation(QWidget):
         self.list_operation.setDragEnabled(True)
         self.list_operation.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.list_operation.setObjectName('list_operation')
+        self.list_operation.setProperty('theme', stylesmanager.get_theme())
         self.list_operation.setStyleSheet(stylesmanager.get_stylesheet())
-        
+        self.chk_theme = QCheckBox('Light theme')
+        self.chk_theme.setChecked(stylesmanager.get_theme())
+        self.chk_theme.stateChanged.connect()
         self.list_algorithm = self.init_list()
         for operation in self.list_algorithm:
             QListWidgetItem(operation, self.list_operation)
@@ -39,3 +42,11 @@ class Operation(QWidget):
                         ingrediet.append(filename)
                 return ingrediet
         return []
+    
+    def change_theme(self, state):
+        if state == 2:
+            os.environ[stylesmanager.KEY] = True
+            print('Please restart IDA to change effect')
+        else:
+            os.environ[stylesmanager.KEY] = False
+

@@ -1,9 +1,23 @@
-from PyQt5.QtWidgets import QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
-import PyQt5.QtWidgets as QtWidgets
-from PyQt5.QtCore import Qt
+from PySide6.QtWidgets import QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton
+import PySide6.QtWidgets as QtWidgets
+from PySide6.QtCore import Qt
 from sharingan.core import stylesmanager
-import idaapi, idc, ida_bytes, ida_kernwin, ida_lines, ida_name, ida_idp
-import threading
+import idaapi, idc, ida_bytes, ida_kernwin, ida_lines, ida_name, ida_idp, ida_auto, ida_idaapi
+import threading, platform
+
+
+class PatchedBytesVistor(object):
+    def __init__(self, start_ea, end_ea):
+        self.start_ea = start_ea
+        self.end_ea = end_ea
+
+    def __call__(self, ea, fpos, original_bytes, patch_bytes, cnt=()):
+        if fpos != -1 and ea >= self.start_ea and ea <= self.end_ea:
+            for i in fpos:
+                ida_bytes.revert_byte(ea)
+            ida_auto.auto_mark_range(ea, ea + fpos, ida_auto.AU_CODE)
+            ida_auto.plan_and_wait(ea, ea + fpos, True)
+        return 0
 
 
 class DBHooks(ida_idp.IDB_Hooks):
@@ -69,7 +83,6 @@ class ASMView(ida_kernwin.simplecustviewer_t):
     def __init__(self):
         super().__init__()
         self.ui_hooks = UIHooks()
-        self.ui_hooks.get_lines_rendering_info = self.highlight_lines
         self.start_ea = 0
         self.end_ea = 0
         self.addr_highlight = set()
@@ -102,7 +115,7 @@ class ASMView(ida_kernwin.simplecustviewer_t):
             next_addr = idc.next_head(next_addr)
         self.Refresh()
     
-    def highlight_lines(self, out, widget, rin):
+    def get_lines_rendering_info(self, out, widget, rin):
         if widget != self._twidget:
             return
         for _, line in enumerate(rin.sections_lines[0]):
@@ -169,17 +182,22 @@ class DisassembleTab(QWidget):
         layout.addLayout(layout_asm, stretch=10)
 
     def revert(self):
-        print('Revert')
+        visitor = PatchedBytesVistor(self.lbl_start_ea.text(), self.lbl_end_ea.text())
+        ida_bytes.visit_patched_bytes(0, ida_idaapi.BADADDR, visitor)
 
     def get_line_edit_texts(self):
         return [self.ldt_start_ea.text(), self.ldt_end_ea.text()]
 
-    def set_line_edit_texts(self, ea):
-        self.ldt_start_ea.setText(hex(ea))
-        dst_addr = ea
-        for i in range(60):
-            dst_addr = idc.next_head(dst_addr)
-        self.ldt_end_ea.setText(hex(dst_addr))
+    def set_line_edit_texts(self, start_ea, end_ea):
+        if start_ea != end_ea:
+            self.ldt_start_ea.setText(hex(start_ea))
+            self.ldt_end_ea.setText(hex(end_ea))
+        else:
+            self.ldt_start_ea.setText(hex(start_ea))
+            dst_addr = start_ea
+            for i in range(60):
+                dst_addr = idc.next_head(dst_addr)
+            self.ldt_end_ea.setText(hex(dst_addr))
         self.disassemble()
 
     def choose_function(self):
@@ -231,7 +249,7 @@ class DisassembleTab(QWidget):
 
         self.clear_addr_highlight()
         self.asm_before.disassemble(start_ea, end_ea)
-        self.asm_after.disassemble(start_ea, end_ea)
+        # self.asm_after.disassemble(start_ea, end_ea)
 
     def clear_addr_highlight(self):
         self.asm_before.addr_highlight.clear()
@@ -250,7 +268,9 @@ class Disassembler(QTabWidget):
         self.btn_add_tab.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
         self.btn_add_tab.clicked.connect(self.add_new_tab)
         self.setCornerWidget(self.btn_add_tab, Qt.TopRightCorner)
-        self.setStyleSheet(stylesmanager.get_stylesheet())
+        if platform.system().lower() == 'windows':
+            self.setProperty('applyWindows', 'true')
+            self.setStyleSheet(stylesmanager.get_stylesheet())
         self.tab_contents = []
         self.add_new_tab()
 
@@ -274,7 +294,7 @@ class Disassembler(QTabWidget):
         tab_content = self.tab_contents[index]
         tab_content.clear_addr_highlight()
 
-    def set_tab_line_edit_texts(self, index, ea):
+    def set_tab_line_edit_texts(self, index, start_ea, end_ea):
         tab_content = self.tab_contents[index]
-        tab_content.set_line_edit_texts(ea)
+        tab_content.set_line_edit_texts(start_ea, end_ea)
         

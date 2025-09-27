@@ -1,6 +1,6 @@
-from sharingan.base.customitembase import CustomItemBase
+from sharingan.base.itemlist import ItemList
 
-class Substitutions(CustomItemBase):
+class Substitutions(ItemList):
     def __init__(self, parent=None):
         super(Substitutions, self).__init__(parent)
         self.set_label_text('Substitutions')

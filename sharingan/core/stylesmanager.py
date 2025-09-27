@@ -1,6 +1,7 @@
 import idaapi, os
 
 stylesheet = None
+KEY = 'THEME_SHARINGAN'
 
 def load_stylesheet():
     global stylesheet
@@ -16,4 +17,7 @@ def get_stylesheet():
     if not stylesheet:
         load_stylesheet()
     return stylesheet
+
+def get_theme():
+    return 'light' if os.environ.get(KEY) else 'dark'
                 

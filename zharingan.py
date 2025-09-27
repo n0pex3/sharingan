@@ -3,6 +3,7 @@ from sharingan.mainwindow import MainWindow
 from sharingan.core import stylesmanager
 from sharingan.core.contextmenu import InitHookMenu
 
+
 class PluginPanel(idaapi.PluginForm):
     def __init__(self):
         super().__init__()

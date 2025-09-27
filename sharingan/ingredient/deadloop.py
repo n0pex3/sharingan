@@ -1,6 +1,6 @@
-from sharingan.base.customitembase import CustomItemBase
+from sharingan.base.itemlist import ItemList
 
-class DeadLoop(CustomItemBase):
+class DeadLoop(ItemList):
     def __init__(self, parent=None):
         super(DeadLoop, self).__init__(parent)
         self.set_label_text('DeadLoop')

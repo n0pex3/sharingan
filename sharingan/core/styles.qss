@@ -1,32 +1,70 @@
-QWidget#list_operation {
+/*Light theme operation*/
+QWidget[theme='light']#list_operation {
     font-size: 22pt;
     color: rgb(77, 134, 169);
 }
 
-QListWidget#list_operation::item:selected {
+QListWidget[theme='light']#list_operation::item:selected {
     background: rgb(216, 231, 241);
 }
 
-QListWidget#list_operation::item {
+QListWidget[theme='light']#list_operation::item {
     border-bottom: 1px solid rgb(194, 231, 240);
     background-color: #dcecf6;
     padding: 10px;
 }
+/*Light theme operation/
 
-QListWidget#list_recipe::item {
+/*Dark theme operation*/
+QWidget[theme='dark']#list_operation {
+    font-size: 22pt;
+    color: rgb(216, 231, 241);
+}
+
+QListWidget[theme='dark']#list_operation::item:selected {
+    background: rgb(81, 81, 81);
+}
+
+QListWidget[theme='dark']#list_operation::item {
+    border-bottom: 1px solid rgb(194, 231, 240);
+    background-color: rgb(51, 51, 51);
+    padding: 10px;
+}
+/*Dark theme operation*/
+
+/*Dark theme recipe*/
+QListWidget[theme='dark']#list_recipe::item {
+    border-bottom: 1px solid rgb(215, 231, 195);
+    background-color: rgb(37, 37, 37)
+}
+
+QListWidget[theme='dark']#list_recipe::item:selected {
+    background: rgb(67, 67, 67);
+}
+
+QLabel[theme='dark']#item_recipe {
+    font-weight: bold; 
+    font-size: 14pt;  
+    color: rgb(216, 231, 241);
+}
+/*Dark theme recipe*/
+
+/*Light theme recipe*/
+QListWidget[theme='light']#list_recipe::item {
     border-bottom: 1px solid rgb(215, 231, 195);
     background-color: rgb(226, 239, 218)
 }
 
-QListWidget#list_recipe::item:selected {
+QListWidget[theme='light']#list_recipe::item:selected {
     background: lightgreen;
 }
 
-QLabel#item_recipe {
+QLabel[theme='light']#item_recipe {
     font-weight: bold; 
     font-size: 14pt;  
-    color: rgb(87, 133, 78)
+    color: rgb(37, 37, 37)
 }
+/*Light theme recipe*/
 
 QSplitter::handle {
     background-color: #ccc;
@@ -36,8 +74,7 @@ QSplitter::handle:vertical {
     height: 1px;
 }
 
-QTabWidget#disassembler QTabBar::tab {
-    background: #f0f0f0;
+QTabWidget[applyWindows='true']#disassembler QTabBar::tab {
     border: 1px solid #ccc;
     border-radius: 5px;
     padding: 8px 12px;
@@ -45,22 +82,16 @@ QTabWidget#disassembler QTabBar::tab {
     min-width: 80px;
 }
 
-QTabWidget#disassembler QTabBar::tab:selected {
-    background: #ffffff;
+QTabWidget[applyWindows='true']#disassembler QTabBar::tab:selected {
     border: 1px solid #aaa;
 }
 
-QTabWidget#disassembler QTabBar::tab:!selected {
-    background: #e0e0e0;
-}
-
-QTabWidget#disassembler::pane {
+QTabWidget[applyWindows='true']#disassembler::pane {
     border: 1px solid #000;
-    background: white;
     margin: 10px;
 }
 
-QPushButton#new_tab {
+QPushButton[applyWindows='true']#new_tab {
     padding: 0px;
     margin: 0px;
 }
