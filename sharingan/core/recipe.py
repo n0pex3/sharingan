@@ -89,7 +89,7 @@ class Recipe(QWidget):
         self.signal_filter.filter_.connect(self.add_ingredient_substitute)
 
         self.btn_delete = QPushButton('Delete')
-        self.btn_delete.clicked.connect(self.delete)
+        self.btn_delete.clicked.connect(self.delete_ingredient)
         self.btn_cook = QPushButton('Cook')
         self.btn_cook.clicked.connect(self.cook)
         self.btn_scan = QPushButton('Scan')
@@ -138,7 +138,7 @@ class Recipe(QWidget):
         self.hint_hook.unhook()
 
     # delete item in list recipe
-    def delete(self):
+    def delete_ingredient(self):
         list_selection = self.list_recipe.selectedIndexes()
         if list_selection:
             for index in list_selection:
@@ -191,7 +191,7 @@ class Recipe(QWidget):
             self.obfuscated_regions.append(possible_obfuscation_regions)
             for r in possible_obfuscation_regions:
                 hint = ingredient.description
-                # check found obfuscated region outside current disasembler
+                # check found obfuscated region outside current disassembler
                 for i in range(len(r.regions)):
                     # last addr may equal end address obfuscated region, use below equal
                     if not (self.start_ea <= r.regions[i].start_ea < self.end_ea) or not (self.start_ea <= r.regions[i].end_ea <= self.end_ea):
@@ -207,6 +207,9 @@ class Recipe(QWidget):
         self.check_overlapping_regions()
         self.highlight_region()
         print('Done scanning!!!')
+
+        active_index = self.disassembler.currentIndex()
+        self.disassembler.refresh_tab_asm_view(active_index)
 
         # if auto patch is checked, it will be cook
         if self.chk_auto_patch.isChecked():

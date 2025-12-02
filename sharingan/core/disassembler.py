@@ -12,11 +12,26 @@ FILTER = 'sharingan:filter'
 # color asm line
 class ASMLine:
     def __init__(self, ea):
-        self.colored_instruction = idaapi.generate_disasm_line(ea)
-        assert self.colored_instruction, f'Bad address... {hex(ea)}'
         self.label = idaapi.get_short_name(ea)
         self.address = ea
         self.padding = ' ' * 2
+
+        flags = idaapi.get_flags(ea)
+
+        if idaapi.is_head(flags):
+            self.colored_instruction = idaapi.generate_disasm_line(ea, 0)
+            if not self.colored_instruction:
+                self.colored_instruction = idaapi.COLSTR("??", idaapi.SCOLOR_ERROR)
+        else:
+            byte_val = idaapi.get_wide_byte(ea)
+            s_val = f"{byte_val:02X}h"
+            
+            self.colored_instruction = (
+                idaapi.COLSTR("db", idaapi.SCOLOR_KEYWORD) + " " + 
+                idaapi.COLSTR(s_val, idaapi.SCOLOR_DNUM)
+            )
+        # self.colored_instruction = idaapi.generate_disasm_line(ea)
+        # assert self.colored_instruction, f'Bad address... {hex(ea)}'
 
     @property
     def colored_address(self):
@@ -118,7 +133,13 @@ class ASMView(idaapi.simplecustviewer_t):
                 self.AddLine(line.colored_blank)
                 self.AddLine(line.colored_label)
             self.AddLine(line.colored_asmline)
-            next_addr = idaapi.next_head(next_addr, idaapi.BADADDR)
+
+            flags = idaapi.get_flags(next_addr)
+            if idaapi.is_head(flags):
+                size_item = idaapi.get_item_size(next_addr)
+                next_addr += size_item if size_item > 0 else 1
+            else:
+                next_addr += 1
         self.Refresh()
 
     def decompile(self, start_ea, end_ea, is_diff=False):
@@ -136,7 +157,6 @@ class ASMView(idaapi.simplecustviewer_t):
             print("Failed to decompile!")
             return
         pseudocode = cfunc.get_pseudocode()
-        # self.pseudocode = str()
         self.ClearLines()
         for i, sline in enumerate(pseudocode):
             if not is_diff:
@@ -423,6 +443,11 @@ class DisassembleTab(QWidget):
 
     def clear_asmview(self):
         self.asm_view.ClearLines()
+
+    def refresh_asm_view(self):
+        start_ea = self.asm_view.start_ea
+        end_ea = self.asm_view.end_ea
+        self.asm_view.disassemble(start_ea, end_ea)
     
 
 # class handle list tab disassembler
@@ -472,3 +497,6 @@ class Disassembler(QTabWidget):
 
     def compare_tab_code(self, index, obfuscated_regions=None):
         self.tab_contents[index].wrapper_diff_code(obfuscated_regions)
+
+    def refresh_tab_asm_view(self, index):
+        self.tab_contents[index].refresh_asm_view()

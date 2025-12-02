@@ -39,21 +39,30 @@ class JmpClean(Ingredient):
                     pattern_index += 1
                     current_addr = start_addr
                     continue
-                else:
-                    current_segment = idaapi.get_first_seg()
-                    while current_segment.start_ea != idaapi.BADADDR:
-                        if not (current_segment.start_ea <= found_addr < current_segment.end_ea):
-                            current_segment = idaapi.get_next_seg(current_segment.start_ea)
-                        
-                        current_addr = found_addr
-                        len_obfu_jump = len(pattern_str.split())
-                        comment = ''
-                        while current_addr < found_addr + len_obfu_jump:
-                            if not (current_segment.start_ea < idc.get_operand_value(current_addr, 0) < current_segment.end_ea):
-                                print(f'Invalid jmp {current_addr}')
-                                continue
-                            comment += f'{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n'
-                            current_addr += len_obfu_jump // 2
+                else:               
+                    current_addr = found_addr
+                    len_obfu_jump = len(pattern_str.split())
+                    comment = ''
+                    is_valid_jmp = True
+                    start_binary = idaapi.get_imagebase()
+                    end_binary = idaapi.get_last_seg().end_ea if idaapi.get_last_seg() else idaapi.BADADDR
+                    while current_addr < found_addr + len_obfu_jump:
+                        if not (start_binary < idc.get_operand_value(current_addr, 0) < end_binary):
+                            print(f'Invalid jmp {current_addr}')
+                            is_valid_jmp = False
+                            continue
+                        comment += f'{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n'
+                        current_addr += len_obfu_jump // 2
+
+                    if is_valid_jmp:
+                        dest_jmp = idc.get_operand_value(found_addr, 0)
+                        addr_obfus_jmp = idaapi.get_item_head(dest_jmp)
+                        # size_insn_obfus_jmp = DeobfuscateUtils.get_instruction_size(addr_obfus_jmp)
+                        size_insn_obfus_jmp = idaapi.get_item_size(addr_obfus_jmp)
+                        DeobfuscateUtils.del_items(addr_obfus_jmp, size_insn_obfus_jmp, True)
+                        next_addr_obfus_jmp = idaapi.next_head(dest_jmp, idaapi.BADADDR)
+                        DeobfuscateUtils.mark_as_code(dest_jmp, next_addr_obfus_jmp)
+                        size_invalid_opcode = dest_jmp - addr_obfus_jmp
 
                         if len_obfu_jump == 4:
                             mod_bytes = bytearray(ida_bytes.get_bytes(found_addr, len_obfu_jump))
@@ -68,11 +77,12 @@ class JmpClean(Ingredient):
                                 mod_bytes[i] = 0x90                        
                         possible_region = ObfuscatedRegion(start_ea = found_addr, end_ea = found_addr + len_obfu_jump, obfus_size = len_obfu_jump, comment = comment, 
                                                             patch_bytes = mod_bytes, name = 'jumpclean')
+                        possible_region.append_obfu(start_ea = addr_obfus_jmp, end_ea = dest_jmp, obfus_size = size_invalid_opcode, comment = 'NOP',
+                                                    patch_bytes = size_invalid_opcode * b'\x90')
                         self.possible_obfuscation_regions.append(possible_region)
-                        break
                         
                     key_index = 0
-                current_addr = found_addr + len(pattern_str.split())
+                current_addr = found_addr + len_obfu_jump
             key_index += 1
 
         return self.possible_obfuscation_regions

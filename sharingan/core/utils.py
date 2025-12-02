@@ -31,8 +31,11 @@ class DeobfuscateUtils:
         idaapi.auto_wait()
 
     @staticmethod
-    def del_items(addr, length):
-        ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE, length)
+    def del_items(addr, length, is_expand=False):
+        if not is_expand:
+            ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE, length)
+        else:
+            ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE | ida_bytes.DELIT_EXPAND, length)
         idaapi.auto_wait()
 
     @staticmethod
