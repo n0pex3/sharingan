@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QComboBox, QTableWidget, QTableWidgetItem, QStackedWidget, QHeaderView, QAbstractItemView, QCheckBox, QToolButton
+from PySide6.QtWidgets import QApplication, QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QComboBox, QTableWidget, QTableWidgetItem, QStackedWidget, QHeaderView, QAbstractItemView, QCheckBox, QToolButton
 from PySide6.QtCore import Qt, QTimer
 from sharingan.core.stylesmanager import ManageStyleSheet
 import idaapi, ida_bytes, ida_hexrays, ida_kernwin
@@ -311,6 +311,7 @@ class DisassembleTab(QWidget):
         self.mode = 'disassembler'
         self.string_results = []
         self.string_row_checkboxes = []
+        self._last_checkbox_row = None
         try:
             self.string_finder = StringFinder()
         except Exception as exc:
@@ -420,6 +421,7 @@ class DisassembleTab(QWidget):
         self.tbl_string.setRowCount(1)
         self.tbl_string.clearContents()
         self.string_row_checkboxes.clear()
+        self._last_checkbox_row = None
         for col in range(1, 6):
             align = Qt.AlignCenter if col in (1, 3) else None
             tooltip = '0' if col == 2 else None
@@ -441,7 +443,7 @@ class DisassembleTab(QWidget):
         checkbox.setEnabled(enabled)
         if enabled:
             checkbox.stateChanged.connect(self._on_row_checkbox_state_changed)
-            checkbox.pressed.connect(lambda r=row: self._select_row_from_checkbox(r))
+            checkbox.clicked.connect(lambda checked, r=row: self._handle_row_checkbox_clicked(r, checked))
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -452,6 +454,25 @@ class DisassembleTab(QWidget):
             self.string_row_checkboxes.append(checkbox)
 
     def _on_row_checkbox_state_changed(self, _state):
+        self._update_checkbox_header_label()
+
+    def _handle_row_checkbox_clicked(self, row: int, checked: bool):
+        self._select_row_from_checkbox(row)
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers & Qt.ShiftModifier and self._last_checkbox_row is not None:
+            self._set_checkbox_range_state(self._last_checkbox_row, row, checked)
+        self._last_checkbox_row = row
+
+    def _set_checkbox_range_state(self, start_row: int, end_row: int, state: bool):
+        if not self.string_row_checkboxes:
+            return
+        lower = max(0, min(start_row, end_row))
+        upper = min(len(self.string_row_checkboxes) - 1, max(start_row, end_row))
+        for idx in range(lower, upper + 1):
+            checkbox = self.string_row_checkboxes[idx]
+            checkbox.blockSignals(True)
+            checkbox.setChecked(state)
+            checkbox.blockSignals(False)
         self._update_checkbox_header_label()
 
     def _select_row_from_checkbox(self, row: int):
@@ -474,6 +495,7 @@ class DisassembleTab(QWidget):
             cb.blockSignals(True)
             cb.setChecked(state)
             cb.blockSignals(False)
+        self._last_checkbox_row = None
         self._update_checkbox_header_label()
 
     def _handle_header_checkbox_button(self):
@@ -530,6 +552,7 @@ class DisassembleTab(QWidget):
 
         self.tbl_string.setRowCount(len(self.string_results))
         self.string_row_checkboxes.clear()
+        self._last_checkbox_row = None
         for row, item in enumerate(self.string_results):
             idx_item = self._make_table_item(str(row + 1), align=Qt.AlignCenter)
             raw_value = item.get('value', '')
