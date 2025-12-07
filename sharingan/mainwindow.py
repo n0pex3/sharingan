@@ -7,12 +7,12 @@ from sharingan.core.disassembler import Disassembler
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, objEP, parent=None):
-        super(MainWindow, self).__init__(parent)
+    def __init__(self, objEP):
+        super().__init__()
 
-        self.operation = Operation()
         self.disassembler = Disassembler()
         self.recipe = Recipe(disassembler=self.disassembler)
+        self.operation = Operation(recipe=self.recipe)
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.addWidget(self.operation)
@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
 
         self.recipe.chk_compact.stateChanged.connect(self.toggle_compact)
         self.splitter.setChildrenCollapsible(False)
-        operation_width = self.operation.list_operation.sizeHint().width()
+        operation_width = self.operation.list_decryption.sizeHint().width()
         self.splitter.setSizes([operation_width, 1.5 * operation_width, 4 * operation_width])
 
         self.layout_panel = QHBoxLayout()
@@ -46,6 +46,6 @@ class MainWindow(QMainWindow):
                 self.splitter.setSizes(sizes)
         else:
             self.disassembler.show()
-            operation_width = self.operation.list_operation.sizeHint().width()
+            operation_width = self.operation.list_decryption.sizeHint().width()
             self.splitter.setSizes([operation_width, 1.5 * operation_width, 4 * operation_width])
 

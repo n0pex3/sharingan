@@ -6,7 +6,7 @@ import threading, platform, difflib
 from sharingan.core.utils import DeobfuscateUtils
 
 
-FILTER = 'sharingan:filter'
+FILTER_ACTION_NAME = 'sharingan:filter'
 
 
 # color asm line
@@ -30,8 +30,6 @@ class ASMLine:
                 idaapi.COLSTR("db", idaapi.SCOLOR_KEYWORD) + " " + 
                 idaapi.COLSTR(s_val, idaapi.SCOLOR_DNUM)
             )
-        # self.colored_instruction = idaapi.generate_disasm_line(ea)
-        # assert self.colored_instruction, f'Bad address... {hex(ea)}'
 
     @property
     def colored_address(self):
@@ -62,28 +60,49 @@ class Filter(idaapi.action_handler_t):
         self.signal_filter = signal_filter
     
     def activate(self, ctx):
+        if not self.signal_filter:
+            return 0
+
+        start_ea = idaapi.BADADDR
+        end_ea = idaapi.BADADDR
+
         if ctx.cur_flags & idaapi.ACF_HAS_SELECTION:
-            start_splace = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel._from.at)
-            end_splace = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel.to.at)
-            start_colorize_line = start_splace.generate(idaapi.get_viewer_user_data(ctx.widget), 1)[0][0]
-            end_colorize_line = end_splace.generate(idaapi.get_viewer_user_data(ctx.widget), 1)[0][0]
-            raw_start_line = idaapi.tag_remove(start_colorize_line)
-            raw_end_line = idaapi.tag_remove(end_colorize_line)
-            start_ea = int(raw_start_line.split()[0], 16)
-            end_ea = int(raw_end_line.split()[0], 16)
-            end_ea = idaapi.next_head(end_ea, idaapi.BADADDR)
-            self.signal_filter.filter_.emit(start_ea, end_ea)
+            # handle selection
+            viewer = idaapi.get_viewer_user_data(ctx.widget)
+            
+            # generate line at selection
+            start_place = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel._from.at)
+            start_line = start_place.generate(viewer, 1)[0][0]
+            end_place = idaapi.place_t_as_simpleline_place_t(ctx.cur_sel.to.at)
+            end_line = end_place.generate(viewer, 1)[0][0]
+
+            # parse start ea
+            raw_start = idaapi.tag_remove(start_line).split()
+            if raw_start:
+                start_ea = int(raw_start[0], 16)
+            # parse end ea
+            raw_end = idaapi.tag_remove(end_line).split()
+            if raw_end:
+                end_ea = int(raw_end[0], 16)
+                end_ea = idaapi.next_head(end_ea, idaapi.BADADDR)
         else:
-            colorize_line = idaapi.get_custom_viewer_curline(ctx.widget, False)
-            raw_line = idaapi.tag_remove(colorize_line)
-            start_ea = end_ea = int(raw_line.split()[0], 16)
+            # handle single line
+            colored_line = idaapi.get_custom_viewer_curline(ctx.widget, False)
+            raw_line = idaapi.tag_remove(colored_line).split()
+            if raw_line:
+                start_ea = int(raw_line[0], 16)
+                end_ea = start_ea
+
+        if start_ea != idaapi.BADADDR:
             self.signal_filter.filter_.emit(start_ea, end_ea)
+        return 1
     
     def update(self, ctx):
         return idaapi.AST_ENABLE_ALWAYS
 
 
 # override get_lines_rendering_info to highlight
+# override finish_populating_widget_popup to insert option filter
 class UIHooks(idaapi.UI_Hooks):
     def get_lines_rendering_info(self, out, widget, info):
         pass
@@ -97,22 +116,26 @@ class ASMView(idaapi.simplecustviewer_t):
     def __init__(self):
         super().__init__()
         self.ui_hooks = UIHooks()
-        self.ui_hooks.get_lines_rendering_info = self.highlight_lines_disassm
+        self.ui_hooks.get_lines_rendering_info = self.highlight_diff_lines
         self.ui_hooks.finish_populating_widget_popup = self.popup_option_filter
 
         self.start_ea = 0x0
         self.end_ea = 0x0
-
-        self.pseudocode = []
+        self.lines_pseudocode_before = []
+        self.lines_pseudocode_before_raw = []
+        self.current_asm_lines = []
 
     def Create(self, name_windows, mode):
         if not super().Create(name_windows):
             return False
         self.mode = mode
         self.filter = Filter()
-        idaapi.unregister_action(FILTER)
-        action_filter = idaapi.action_desc_t(FILTER, 'Filter', self.filter, None, None)
+
+        # re-register action to prevent duplicate option
+        idaapi.unregister_action(FILTER_ACTION_NAME)
+        action_filter = idaapi.action_desc_t(FILTER_ACTION_NAME, 'Filter', self.filter, None, None)
         assert idaapi.register_action(action_filter), ' Action filter registration failed'
+
         self._twidget = self.GetWidget()
         self.widget = idaapi.PluginForm.TWidgetToPyQtWidget(self._twidget)
         self.ui_hooks.hook()
@@ -120,20 +143,35 @@ class ASMView(idaapi.simplecustviewer_t):
     
     def OnClose(self):
         self.ui_hooks.unhook()
-        idaapi.unregister_action(FILTER)
+        idaapi.unregister_action(FILTER_ACTION_NAME)
     
     def disassemble(self, start_ea, end_ea):
         self.start_ea = start_ea
         self.end_ea = end_ea
+        self.current_asm_lines.clear()
         self.ClearLines()
+
         next_addr = start_ea
         while next_addr < end_ea:
             line = ASMLine(next_addr)
             if line.label:
                 self.AddLine(line.colored_blank)
                 self.AddLine(line.colored_label)
+                # backup to diff
+                self.current_asm_lines.append({
+                    'addr': next_addr,
+                    'content': line.colored_blank
+                })
+                self.current_asm_lines.append({
+                    'addr': next_addr,
+                    'content': line.colored_label
+                })
             self.AddLine(line.colored_asmline)
-
+            self.current_asm_lines.append({
+                'addr': next_addr,
+                'content': line.colored_asmline
+            })
+            # add data if found
             flags = idaapi.get_flags(next_addr)
             if idaapi.is_head(flags):
                 size_item = idaapi.get_item_size(next_addr)
@@ -142,9 +180,12 @@ class ASMView(idaapi.simplecustviewer_t):
                 next_addr += 1
         self.Refresh()
 
-    def decompile(self, start_ea, end_ea, is_diff=False):
+    def decompile(self, start_ea, end_ea):
         self.start_ea = start_ea
         self.end_ea = end_ea
+        self.lines_pseudocode_before.clear()
+        self.lines_pseudocode_before_raw.clear()
+
         if not ida_hexrays.init_hexrays_plugin():
             print('Fail init decompiler')
             return
@@ -158,10 +199,11 @@ class ASMView(idaapi.simplecustviewer_t):
             return
         pseudocode = cfunc.get_pseudocode()
         self.ClearLines()
-        for i, sline in enumerate(pseudocode):
-            if not is_diff:
-                self.AddLine(sline.line)
-            self.pseudocode.append(idaapi.tag_remove(sline.line))
+        for sline in pseudocode:
+            self.AddLine(sline.line)
+            # backup to diff
+            self.lines_pseudocode_before.append(sline.line)
+            self.lines_pseudocode_before_raw.append(idaapi.tag_remove(sline.line))
         self.Refresh()
 
     def set_signal_filter(self, signal_filter):
@@ -169,128 +211,157 @@ class ASMView(idaapi.simplecustviewer_t):
 
     def popup_option_filter(self, widget, popup, ctx):
         if self.mode == 'disassembler':
-           idaapi.attach_action_to_popup(widget, popup, FILTER, None, 0) 
+           idaapi.attach_action_to_popup(widget, popup, FILTER_ACTION_NAME, None, 0) 
 
-    def highlight_lines_disassm(self, out, widget, info):
-        pass
+    def highlight_diff_lines(self, out, widget, info):
+        if widget != self._twidget:
+            return
+        for _, line in enumerate(info.sections_lines[0]):
+            splace = idaapi.place_t_as_simpleline_place_t(line.at)
+            line_info = self.GetLine(splace.n)
+            if not line_info:
+                continue
+            colored_line, _, _ = line_info
+            if colored_line.startswith('-'):
+                color = idaapi.CK_EXTRA11
+            elif colored_line.startswith('+'):
+                color = idaapi.CK_EXTRA1
+            else:
+                continue
+            e = idaapi.line_rendering_output_entry_t(line)
+            e.bg_color = color
+            e.flags = idaapi.LROEF_FULL_LINE
+            out.entries.push_back(e)
+
+    def split_header_body(self, raw_lines, colored_lines):
+        sep_index = -1
+        for i, line in enumerate(raw_lines):
+            # find empty line, border header and content
+            if not line.strip():
+                sep_index = i
+                break
+        
+        # return parts header, body of color and raw line
+        if sep_index != -1:
+            return (colored_lines[:sep_index+1], colored_lines[sep_index+1:], 
+                    raw_lines[:sep_index+1], raw_lines[sep_index+1:])
+        else:
+            # not found empty line, return all
+            return [], colored_lines, [], raw_lines
+
+    def diff_decompiler(self):
+        if not ida_hexrays.init_hexrays_plugin():
+            return
+        
+        func = idaapi.get_func(self.start_ea)
+        if not func: 
+            return
+        
+        cfunc = ida_hexrays.decompile(func)
+        if not cfunc: 
+            return
+
+        pseudocode_obj = cfunc.get_pseudocode()
+        lines_pseudocode_after = []
+        lines_pseudocode_after_raw = []
+        # capture after state
+        for sline in pseudocode_obj:
+            lines_pseudocode_after.append(sline.line)
+            lines_pseudocode_after_raw.append(idaapi.tag_remove(sline.line))
+
+        self.pseudocode = lines_pseudocode_after_raw
+        self.ClearLines()
+
+        # split parts
+        _, body_before, _, body_before_raw = self.split_header_body(self.lines_pseudocode_before_raw, self.lines_pseudocode_before)
+        header_after, body_after, _, body_after_raw = self.split_header_body(lines_pseudocode_after_raw, lines_pseudocode_after)
+
+        # print header after
+        for line in header_after:
+            self.AddLine(line)
+        
+        # diff
+        matcher = difflib.SequenceMatcher(None, body_before_raw, body_after_raw, autojunk=False)
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                for i in range(i1, i2):
+                    self.AddLine(body_before[i])
+            elif tag == 'delete':
+                for i in range(i1, i2):
+                    self.AddLine(f'- {body_before[i]}')
+            elif tag == 'insert':
+                for i in range(j1, j2):
+                    self.AddLine(f'+ {body_after[i]}')
+            elif tag == 'replace':
+                for i in range(i1, i2):
+                    self.AddLine(f'- {body_before[i]}')
+                for i in range(j1, j2):
+                    self.AddLine(f'+ {body_after[i]}')
+        
+        self.Refresh()
+
+    def diff_disassembler(self, obfuscated_regions):
+        # flatten
+        intervals = []
+        for list_regions in obfuscated_regions:
+            for r in list_regions:
+                for region_part in r.regions:
+                    intervals.append((region_part.start_ea, region_part.end_ea))
+        intervals.sort(key=lambda x: (x[0], x[1]))
+
+        self.ClearLines()
+        is_diff = False
+        idx = 0
+
+        for item in self.current_asm_lines:
+            # current_addr = int(item['addr'], 16)
+            current_addr = item['addr']
+
+            if idx < len(intervals):
+                start, end = intervals[idx]
+            else:
+                start, end = -1, -1
+
+            # CASE 1: print code in obfuscated region (before)
+            if start != -1 and start <= current_addr < end:
+                self.AddLine(f'- {item['content']}')
+                is_diff = True
+            
+            # CASE 2: print current code (after)
+            elif is_diff and (start == -1 or current_addr >= end):
+                is_diff = False
+                
+                # print deobfuscated code
+                prev_start, prev_end = intervals[idx]
+                current_ea = prev_start
+                while current_ea < prev_end:
+                    line = ASMLine(current_ea)
+                    self.AddLine(f'+ {line.colored_asmline}')
+                    current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
+                
+                idx += 1
+                if idx < len(intervals):
+                    next_start, next_end = intervals[idx]
+                else:
+                    next_start, next_end = -1, -1
+
+                # check two patched sequence region, prevent missing
+                if next_start != -1 and next_start <= current_addr < next_end:
+                        self.AddLine(f'- {item['content']}')
+                        is_diff = True
+                else:
+                    # print normal code
+                    self.AddLine(item['content'])
+            # CASE 3: equal
+            else:
+                self.AddLine(item['content'])
+        self.Refresh()
     
     def diff_code(self, obfuscated_regions):
         if self.mode == 'decompiler':
-            lines_pseudocode_before = []
-            for i in range(self.Count()):
-                line_content = self.GetLine(i)[0]
-                lines_pseudocode_before.append(line_content)
-            lines_pseudocode_before_raw = self.pseudocode
-
-            if not ida_hexrays.init_hexrays_plugin():
-                print('Fail init decompiler')
-                return
-            func = idaapi.get_func(self.start_ea)
-            if func is None:
-                print("Please provid address within a function")
-                return
-            cfunc = ida_hexrays.decompile(func)
-            if cfunc is None:
-                print("Failed to decompile!")
-                return
-            pseudocode = cfunc.get_pseudocode()
-            lines_pseudocode_after_raw = []
-            lines_pseudocode_after = []
-            for i, sline in enumerate(pseudocode):
-                lines_pseudocode_after.append(sline.line)
-                lines_pseudocode_after_raw.append(idaapi.tag_remove(sline.line))
-
-            self.ClearLines()
-            comparasion = difflib.SequenceMatcher(None, lines_pseudocode_before_raw, lines_pseudocode_after_raw, autojunk=False)
-            opcodes = comparasion.get_opcodes()
-            for index, (tag, i1, i2, j1, j2) in enumerate(opcodes):
-                if tag == 'equal':
-                    for i in range(i2 - i1):
-                        self.AddLine(f'{lines_pseudocode_before[i1 + i]}')
-                elif tag == 'delete':
-                    for i in range(i2 - i1):
-                        self.AddLine(f'- {lines_pseudocode_before[i1 + i]}')
-                elif tag == 'insert':
-                    for i in range(j2 - j1):
-                        self.AddLine(f'+ {lines_pseudocode_after[j1 + i]}')
-                elif tag == 'replace':
-                    num_before = i2 - i1
-                    num_after = j2 - j1
-                    max_lines = max(num_before, num_after)
-                    for i in range(max_lines):
-                        if i < num_before:
-                            self.AddLine(f'- {lines_pseudocode_before[i1 + i]}')
-                        if i < num_after:
-                            self.AddLine(f'{lines_pseudocode_after[j1 + i]}')
-            self.Refresh()
-
+            self.diff_decompiler()
         elif self.mode == 'disassembler':
-            current_asm_lines = []
-            for i in range(self.Count()):
-                line_content = self.GetLine(i)[0]
-                raw_line = idaapi.tag_remove(line_content)
-                address = raw_line.split()[0]
-                current_asm_lines.append({
-                    'addr': address,
-                    'content': line_content
-                })
-            
-            intervals = []
-            for i, list_regions in enumerate(obfuscated_regions):
-                for j, r in enumerate(list_regions):
-                    for k in range(len(r.regions)):
-                        start = r.regions[k].start_ea
-                        end = r.regions[k].end_ea
-                        intervals.append((start, end))
-            intervals.sort(key=lambda x: (x[0], x[1]))
-
-            self.ClearLines()
-            is_diff = False
-            idx = 0
-
-            for item in current_asm_lines:
-                current_addr = int(item['addr'], 16)
-                if idx < len(intervals):
-                    start, end = intervals[idx]
-                else:
-                    start, end = -1, -1
-
-                # CASE 1: print code in obfuscated region (before)
-                if start != -1 and start <= current_addr < end:
-                    self.AddLine(f'- {item['content']}')
-                    is_diff = True
-                
-                # CASE 2: print current code (after)
-                elif is_diff and (start == -1 or current_addr >= end):
-                    is_diff = False
-                    
-                    # print deobfuscated code
-                    prev_start, prev_end = intervals[idx]
-                    current_ea = prev_start
-                    while current_ea < prev_end:
-                        line = ASMLine(current_ea)
-                        self.AddLine(f'+ {line.colored_asmline}')
-                        current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
-                    
-                    idx += 1
-                    if idx < len(intervals):
-                        next_start, next_end = intervals[idx]
-                    else:
-                        next_start, next_end = -1, -1
-
-                    # check two patched sequence region, prevent missing
-                    if next_start != -1 and next_start <= current_addr < next_end:
-                         self.AddLine(f'- {item['content']}')
-                         is_diff = True
-                    else:
-                        # print normal code
-                        self.AddLine(item['content'])
-
-                # CASE 3: equal
-                else:
-                    self.AddLine(item['content'])
-            
-            self.Refresh()
+            self.diff_disassembler(obfuscated_regions)
 
 
 # class handle each tab disassembler
@@ -304,11 +375,15 @@ class DisassembleTab(QWidget):
         while type(main_tab).__name__ != "Disassembler":
             main_tab = main_tab.parent()
         self.main_tab = main_tab
+
         self.cached_start_ea = None
         self.cached_end_ea = None
         self.mutex = threading.Lock()
         self.mode = 'disassembler'
 
+        self.setup_ui()
+
+    def setup_ui(self):
         self.lbl_start_ea = QLabel('Start EA')
         self.lbl_end_ea = QLabel('End EA')
         self.ldt_start_ea = QLineEdit()
@@ -319,7 +394,7 @@ class DisassembleTab(QWidget):
         self.ldt_end_ea.editingFinished.connect(self.switch_mode_display)
         self.btn_choose = QPushButton('Choose', parent=self)
         self.btn_choose.clicked.connect(self.choose_function)
-        self.cmb_mode = QComboBox(self)
+        self.cmb_mode = QComboBox()
         self.cmb_mode.addItem('Disassembler')
         self.cmb_mode.addItem('Decompiler')
         self.cmb_mode.addItem('String')
@@ -346,6 +421,7 @@ class DisassembleTab(QWidget):
         layout_toolbar.addWidget(self.ldt_end_ea, stretch=3)
         layout_toolbar.addWidget(self.cmb_mode, stretch=2)
         layout_toolbar.addWidget(self.btn_choose, stretch=1)
+        
         page_asm = QWidget()
         layout_asm = QHBoxLayout(page_asm)
         layout_asm.addWidget(self.asm_view.widget)
@@ -355,9 +431,6 @@ class DisassembleTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(layout_toolbar, stretch=1)
         layout.addWidget(self.layout_stack, stretch=10)
-
-    def __del__(self):
-        self.db_hooks.unhook()
 
     def change_mode_code_string(self, index):
         mode = self.cmb_mode.itemText(index)
@@ -392,47 +465,40 @@ class DisassembleTab(QWidget):
         self.ldt_start_ea.editingFinished.emit()
         self.ldt_end_ea.setText(hex(end_func))
         self.ldt_end_ea.editingFinished.emit()
+        self.switch_mode_display()
 
     def switch_mode_display(self):
-        self.mutex.acquire()
-        try:
-            start_ea_txt = self.ldt_start_ea.text()
-            end_ea_txt = self.ldt_end_ea.text()
-            if start_ea_txt == "" or end_ea_txt == "": 
-                self.mutex.release()
-                print('Empty address')
+        with self.mutex:
+            try:
+                s_txt = self.ldt_start_ea.text().strip()
+                e_txt = self.ldt_end_ea.text().strip()
+                
+                if not s_txt or not e_txt:
+                    print('Empty address')
+                    return
+
+                start_ea = int(s_txt, 16) if s_txt.lower().startswith("0x") else int(s_txt)
+                end_ea = int(e_txt, 16) if e_txt.lower().startswith("0x") else int(e_txt)
+
+                if end_ea <= start_ea:
+                    # Logic cũ dùng assert nhưng trong GUI không nên crash app, chỉ return
+                    print("End EA must be greater than Start EA")
+                    return
+
+                if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea:
+                    print('Same previous range')
+                    return
+
+                self.cached_start_ea = start_ea
+                self.cached_end_ea = end_ea
+                
+            except ValueError:
+                print("Error parsing address")
                 return
 
-            if start_ea_txt[:2].lower() == "0x":
-                start_ea = int(start_ea_txt, 16)
-            else:
-                start_ea = int(start_ea_txt)
-            if end_ea_txt[:2].lower() == "0x":
-                end_ea = int(end_ea_txt, 16)
-            else:
-                end_ea = int(end_ea_txt)
-            assert(end_ea > start_ea)
-            if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea: 
-                self.mutex.release()
-                print('Same previous range')
-                return
-
-            self.cached_start_ea = start_ea
-            self.cached_end_ea = end_ea
-            assert(start_ea != None and end_ea != None)
-        except:
-            print("Error parsing address")
-            self.mutex.release()
-            return
-
-        self.mutex.release()
-
-        mode = self.cmb_mode.currentText()
-        if mode.lower() == 'disassembler':
-            self.mode = 'disassembler'
+        if self.mode == 'disassembler':
             self.asm_view.disassemble(start_ea, end_ea)
-        elif mode.lower() == 'decompiler':
-            self.mode = 'decompiler'
+        elif self.mode == 'decompiler':
             self.asm_view.decompile(start_ea, end_ea)
 
     def wrapper_diff_code(self, obfuscated_regions=None):
@@ -444,31 +510,37 @@ class DisassembleTab(QWidget):
     def clear_asmview(self):
         self.asm_view.ClearLines()
 
-    def refresh_asm_view(self):
+    def refresh_asmview(self):
         start_ea = self.asm_view.start_ea
         end_ea = self.asm_view.end_ea
-        self.asm_view.disassemble(start_ea, end_ea)
+        if self.mode == 'disassembler':
+            self.asm_view.disassemble(start_ea, end_ea)
+        elif self.mode == 'decompiler':
+            self.asm_view.decompile(start_ea, end_ea)
     
 
 # class handle list tab disassembler
 class Disassembler(QTabWidget):
-    def __init__(self, parent=None):
-        super(Disassembler, self).__init__(parent)
+    def __init__(self, ):
+        super().__init__()
         self.setTabsClosable(True) 
         self.setMovable(True)
         self.setObjectName('disassembler')
         self.tabCloseRequested.connect(self.close_tab)
+        self.setup_ui()
+        if platform.system().lower() == 'windows':
+            self.setProperty('applyWindows', 'true')
+        self.setStyleSheet(ManageStyleSheet.get_stylesheet())
+        self.tab_contents = []
+        self.signal_filter = None
+        self.add_new_tab()
+
+    def setup_ui(self):
         self.btn_add_tab = QPushButton(' + ')
         self.btn_add_tab.setObjectName('new_tab')
         self.btn_add_tab.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         self.btn_add_tab.clicked.connect(self.add_new_tab)
         self.setCornerWidget(self.btn_add_tab, Qt.TopRightCorner)
-        if platform.system().lower() == 'windows':
-            self.setProperty('applyWindows', 'true')
-            self.setStyleSheet(ManageStyleSheet.get_stylesheet())
-        self.tab_contents = []
-        self.signal_filter = None
-        self.add_new_tab()
 
     def set_tab_signal_filter(self, signal_filter):
         self.signal_filter = signal_filter
@@ -479,7 +551,7 @@ class Disassembler(QTabWidget):
         self.addTab(tab_content, f"Tab {self.count() + 1}")
         self.tab_contents.append(tab_content)
         if self.signal_filter:
-            self.tab_contents[self.currentIndex()].set_signal_filter(self.signal_filter)
+            tab_content.set_signal_filter(self.signal_filter)
         
     def close_tab(self, index):
         if self.count() > 1:
@@ -495,8 +567,10 @@ class Disassembler(QTabWidget):
     def set_tab_line_edit_texts(self, index, start_ea, end_ea, is_all_binary=False):
         self.tab_contents[index].set_line_edit_texts(start_ea, end_ea, is_all_binary)
 
+    # display diff
     def compare_tab_code(self, index, obfuscated_regions=None):
         self.tab_contents[index].wrapper_diff_code(obfuscated_regions)
 
-    def refresh_tab_asm_view(self, index):
-        self.tab_contents[index].refresh_asm_view()
+    # only refresh, no display diff
+    def refresh_tab_asmview(self, index):
+        self.tab_contents[index].refresh_asmview()

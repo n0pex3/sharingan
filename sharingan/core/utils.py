@@ -5,12 +5,6 @@ import idc
 
 class DeobfuscateUtils:
     @staticmethod
-    def get_instruction_size(addr):
-        instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.size
-
-    @staticmethod
     def get_bytes_as_hex_string(addr, size):
         bytes_data = ida_bytes.get_bytes(addr, size)
         return ' '.join([f"{b:02x}" for b in bytes_data])
@@ -78,3 +72,14 @@ class DeobfuscateUtils:
             idc.set_color(current_ea, idc.CIC_ITEM, 0xFFFFFFFF)
             current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
         DeobfuscateUtils.mark_as_code(start_addr, end_addr)
+
+    @staticmethod
+    def color_range(start_addr, end_addr, color):
+        curr = start_addr
+        while curr < end_addr:
+            idc.set_color(curr, idc.CIC_ITEM, color)
+            curr = idaapi.next_head(curr, idaapi.BADADDR)
+
+    @staticmethod
+    def is_all_nop(ba):
+        return all(b == 0x90 for b in ba)

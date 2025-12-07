@@ -1,12 +1,12 @@
-from sharingan.base.ingredient import Ingredient
+from sharingan.base.ingredient import Deobfuscator
 from sharingan.core.utils import DeobfuscateUtils
 import idaapi, ida_bytes, idc
 from sharingan.base.obfuscatedregion import ObfuscatedRegion
 
 
-class JmpClean(Ingredient):
-    def __init__(self, parent=None):
-        super(JmpClean, self).__init__(parent, 'JmpClean')
+class JmpClean(Deobfuscator):
+    def __init__(self):
+        super().__init__('JmpClean')
         self.description = 'ObfuscatedJump'
         self.version = '1.0'
 
@@ -46,6 +46,7 @@ class JmpClean(Ingredient):
                     is_valid_jmp = True
                     start_binary = idaapi.get_imagebase()
                     end_binary = idaapi.get_last_seg().end_ea if idaapi.get_last_seg() else idaapi.BADADDR
+                    # check valid dest jump
                     while current_addr < found_addr + len_obfu_jump:
                         if not (start_binary < idc.get_operand_value(current_addr, 0) < end_binary):
                             print(f'Invalid jmp {current_addr}')
@@ -55,9 +56,9 @@ class JmpClean(Ingredient):
                         current_addr += len_obfu_jump // 2
 
                     if is_valid_jmp:
+                        # create valid instruction, convert invalid opcode to data
                         dest_jmp = idc.get_operand_value(found_addr, 0)
                         addr_obfus_jmp = idaapi.get_item_head(dest_jmp)
-                        # size_insn_obfus_jmp = DeobfuscateUtils.get_instruction_size(addr_obfus_jmp)
                         size_insn_obfus_jmp = idaapi.get_item_size(addr_obfus_jmp)
                         DeobfuscateUtils.del_items(addr_obfus_jmp, size_insn_obfus_jmp, True)
                         next_addr_obfus_jmp = idaapi.next_head(dest_jmp, idaapi.BADADDR)
@@ -74,9 +75,11 @@ class JmpClean(Ingredient):
                             mod_bytes[0] = 0x90
                             mod_bytes[1] = 0xE9    
                             for i in range(6, 12):
-                                mod_bytes[i] = 0x90                        
+                                mod_bytes[i] = 0x90        
+                        # region jump                
                         possible_region = ObfuscatedRegion(start_ea = found_addr, end_ea = found_addr + len_obfu_jump, obfus_size = len_obfu_jump, comment = comment, 
                                                             patch_bytes = mod_bytes, name = 'jumpclean')
+                        # region invalid opcode
                         possible_region.append_obfu(start_ea = addr_obfus_jmp, end_ea = dest_jmp, obfus_size = size_invalid_opcode, comment = 'NOP',
                                                     patch_bytes = size_invalid_opcode * b'\x90')
                         self.possible_obfuscation_regions.append(possible_region)

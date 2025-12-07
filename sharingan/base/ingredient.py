@@ -7,16 +7,13 @@ from sharingan.base.obfuscatedregion import ListObfuscatedRegion
 
 
 class Ingredient(QWidget):
-    def __init__(self, parent: QWidget = None, label: str = "UnnamedModule"):
-        super(Ingredient, self).__init__(parent)
+    def __init__(self, label: str = "UnnamedModule"):
+        super().__init__()
         self.name = label
         self.description = "Description"
         self.version = "1.0"
-        self.possible_obfuscation_regions = ListObfuscatedRegion()
+        
         self.setup_ui()
-
-    def set_signal_toggle(self, signal_toggle):
-        self.signal_toggle = signal_toggle
 
     # define all things relative ui in setup_ui
     def setup_ui(self):
@@ -35,10 +32,6 @@ class Ingredient(QWidget):
         self.layout.addLayout(self.layout_body)
         self.setLayout(self.layout)
 
-    @abstractmethod
-    def scan(self, start_ea: int, end_ea: int) -> ListObfuscatedRegion:
-        raise NotImplementedError('Must be implement method scan')
-
     # active/disable ingredient in recipe when check/uncheck
     def active_ingredient(self, checked):
         if checked:
@@ -56,5 +49,25 @@ class Ingredient(QWidget):
             if child is not self.chk_active:
                 child.setEnabled(not checked)
         self.chk_active.setEnabled(True)
-        # send singal disable obfuscated_region
-        self.signal_toggle.toggle.emit()
+
+
+class Deobfuscator(Ingredient):
+    def __init__(self, label):
+        super().__init__(label)
+        self.possible_obfuscation_regions = ListObfuscatedRegion()
+
+    @abstractmethod
+    def scan(self, start_ea: int, end_ea: int) -> ListObfuscatedRegion:
+        raise NotImplementedError('Must be implement method scan')
+
+
+class Decryption(Ingredient):
+    def __init__(self, label):
+        super().__init__(label)
+
+    @abstractmethod
+    def preview(self):
+        raise NotImplementedError('Must be implement method preview')
+
+        
+

@@ -1,13 +1,13 @@
 import idaapi, ida_bytes
-from sharingan.base.ingredient import Ingredient
+from sharingan.base.ingredient import Deobfuscator
 from PySide6.QtWidgets import QTextEdit, QLineEdit, QHBoxLayout
 from sharingan.core.utils import DeobfuscateUtils
 from sharingan.base.obfuscatedregion import ObfuscatedRegion
 
 
-class Irrelevant(Ingredient):
-    def __init__(self, parent=None):
-        super(Irrelevant, self).__init__(parent, label='Substitute')
+class Substitute(Deobfuscator):
+    def __init__(self):
+        super().__init__('Substitute')
         self.description = 'Substitute'
         self.version = '1.0'
 
@@ -50,7 +50,6 @@ class Irrelevant(Ingredient):
         # get full hex bytes string of instruction and data between start_obfu_addr and end_obfu_addr to search and comment
         while start_obfu_addr < end_obfu_addr and start_obfu_addr != idaapi.BADADDR:
             if ida_bytes.is_code(ida_bytes.get_full_flags(start_obfu_addr)):
-                # instr_size = DeobfuscateUtils.get_instruction_size(start_obfu_addr)
                 instr_size = idaapi.get_item_size(start_obfu_addr)
                 bytes_pattern_find_str += f'{DeobfuscateUtils.get_bytes_as_hex_string(start_obfu_addr, instr_size)} '
                 line_asm = idaapi.generate_disasm_line(start_obfu_addr, 0)

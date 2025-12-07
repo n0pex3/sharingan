@@ -5,12 +5,10 @@ from typing import List
 RegionData = namedtuple('RegionData', ['start_ea', 'end_ea', 'obfus_size', 'comment', 'patch_bytes'])
 
 # one ObfuscatedRegion may contain sequence instructions (len == 1) or rambling instructions (len > 1)
-# one list contain many ObfuscatedRegion 
 class ObfuscatedRegion:
     def __init__(self, start_ea: int = 0, end_ea: int = 0, obfus_size: int = 0, comment: str = '', patch_bytes: bytes = b'', name: str = ''):
         self.regions: List[RegionData] = [RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes)]
         self.name = name
-        self.active = True
 
     def append_obfu(self, start_ea: int, end_ea: int, obfus_size: int, comment: str, patch_bytes: bytes) -> None:
         self.regions.append(RegionData(start_ea, end_ea, obfus_size, comment, patch_bytes))
@@ -22,7 +20,8 @@ class ObfuscatedRegion:
         return '\n'.join(lines)
 
 
-# list contain many ObfuscatedRegion
+# ListObfuscatedRegion contain many ObfuscatedRegion => one ingredient may responde many ObfuscatedRegion
+# ObfuscatedRegion contain field regions, symbol one obfuscated region
 class ListObfuscatedRegion(list):
     def __init__(self) -> None:
         super().__init__()

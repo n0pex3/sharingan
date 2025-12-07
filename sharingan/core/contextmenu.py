@@ -16,7 +16,7 @@ FILTER_ICON = idaapi.load_custom_icon(data=FILTER_ICON_DATA, format='png')
 
 class HintDialog(QDialog):
     def __init__(self):
-        super(HintDialog, self).__init__()
+        super().__init__()
         self.setWindowTitle(f"Input hint")
         self.layout = QVBoxLayout()
         

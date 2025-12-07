@@ -1,4 +1,4 @@
-from sharingan.base.ingredient import Ingredient
+from sharingan.base.ingredient import Deobfuscator
 from PySide6.QtWidgets import QLineEdit, QCheckBox, QHBoxLayout
 import idaapi, ida_bytes, idautils, idc
 import re
@@ -6,9 +6,9 @@ from sharingan.core.utils import DeobfuscateUtils
 from sharingan.base.obfuscatedregion import ObfuscatedRegion
 
 
-class APIHammering(Ingredient):
-    def __init__(self, parent=None):
-        super(APIHammering, self).__init__(parent, 'APIHammering')
+class APIHammering(Deobfuscator):
+    def __init__(self):
+        super().__init__('APIHammering')
         self.description = 'APIHammering'
         self.version = '1.0'
 
@@ -77,7 +77,6 @@ class APIHammering(Ingredient):
             param_count = self.get_arg_count(api_addr)
             if param_count >= 0:
                 # collect call
-                # len_call = DeobfuscateUtils.get_instruction_size(addr_call)
                 len_call = idaapi.get_item_size(addr_call)
                 possible_region = ObfuscatedRegion(start_ea = addr_call, end_ea = addr_call + len_call, obfus_size = len_call,
                                                     comment = idaapi.tag_remove(idaapi.generate_disasm_line(addr_call, 0)), 
@@ -87,7 +86,6 @@ class APIHammering(Ingredient):
                 while func_start <= prev_addr < func_end and param_count > 0:
                     prev_addr = idaapi.prev_head(prev_addr, 0)
                     if DeobfuscateUtils.is_push(prev_addr):
-                        # len_push = DeobfuscateUtils.get_instruction_size(prev_addr)
                         len_push = idaapi.get_item_size(prev_addr)
                         possible_region.append_obfu(start_ea = prev_addr, end_ea = prev_addr + len_push, obfus_size = len_push, 
                                                     comment = idaapi.tag_remove(idaapi.generate_disasm_line(prev_addr, 0)), 
