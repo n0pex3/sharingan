@@ -2,6 +2,7 @@ import idaapi
 from sharingan.mainwindow import MainWindow
 from sharingan.core.stylesmanager import ManageStyleSheet
 from sharingan.core.contextmenu import InitHookMenu
+from sharingan.core.StrFinder.ignore_store import flush_user_ignore_to_bundle
 
 
 class PluginPanel(idaapi.PluginForm):
@@ -18,6 +19,7 @@ class PluginPanel(idaapi.PluginForm):
         PluginPanel.current_instance = self
 
     def OnClose(self, form):
+        flush_user_ignore_to_bundle()
         PluginPanel.current_instance = None
 
 class Sharingan(idaapi.plugin_t):
@@ -29,7 +31,7 @@ class Sharingan(idaapi.plugin_t):
 
     def init(self):
         """Init the IDA plugin."""
-        idaapi.msg("Sharingan initialized!!!\n")
+        idaapi.msg("=" * 80 + "\nSharingan initialized!!!\n" + "=" * 80 + "\n")
         self.hook_menu = InitHookMenu()
         return idaapi.PLUGIN_KEEP
     
@@ -47,6 +49,7 @@ class Sharingan(idaapi.plugin_t):
         self.hook_menu.register_recipe(recipe)
     
     def term(self):
+        flush_user_ignore_to_bundle()
         self.hook_menu.cleanup()
 
 

@@ -1,0 +1,85 @@
+ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+ !"#$%&'()*+,-./0123456789:;<=>?@abcdefghijklmnopqrstuvwxyz[\]^_`ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}~
+ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}~
+ !"#$%&'()*+,-./0123456789:;<=>?@abcdefghijklmnopqrstuvwxyz[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+abcdefghijklmnopqrstuvwxyz
+0123456789
+0123456789ABCDEF
+0123456789abcdefghijklmnopqrstuvwxyz
+0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
+:Jan:January:Feb:February:Mar:March:Apr:April:May:May:Jun:June:Jul:July:Aug:August:Sep:September:Oct:October:Nov:November:Dec:December
+JanFebMarAprMayJunJulAugSepOctNovDec
+January
+February
+March
+April
+May
+June
+July
+August
+September
+October
+November
+December
+SunMonTueWedThuFriSat
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+Saturday
+Sunday
+portuguese-brazilian
+american
+`local static guard'
+`vbase destructor'
+Complete Object Locator'
+Class Hierarchy Descriptor'
+Base Class Array'
+Base Class Descriptor at (
+Type Descriptor'
+`placement delete[] closure'
+`placement delete closure'
+`omni callsig'
+`local vftable constructor closure'
+`local vftable'
+`udt returning'
+`copy constructor closure'
+`scalar deleting destructor'
+`default constructor closure'
+bad allocation
+KERNEL32
+Microsoft Visual C++ Runtime Library
+DecodePointer
+EncodePointer
+CorExitProcess
+VirtualProtect
+R6002
+R6016
+R6030
+Program: 
+Runtime Error!
+bad locale name
+ios_base::badbit set
+ios_base::eofbit set
+ios_base::failbit set
+- CRT not initialized
+program name unknown>
+<program name unknown>
+- floating point not loaded
+Program: <program name unknown>
+- not enough space for thread data
+`dynamic atexit destructor for '
+`dynamic initializer for '
+`RTTI
+`typeof'
+`vcall'
+`vbtable'
+`vftable'
+MM/dd/yy
+dddd, MMMM dd, yyyy
+HH:mm:ss
+__fastcall
+__clrcall
+log10
