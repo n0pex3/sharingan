@@ -12,7 +12,7 @@ class Ingredient(QWidget):
         self.name = label
         self.description = "Description"
         self.version = "1.0"
-        
+
         self.setup_ui()
 
     # define all things relative ui in setup_ui
@@ -68,6 +68,3 @@ class Decryption(Ingredient):
     @abstractmethod
     def preview(self):
         raise NotImplementedError('Must be implement method preview')
-
-        
-

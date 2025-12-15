@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QLineEdit, QCheckBox, QHBoxLayout
 import idaapi, ida_bytes, idautils, idc
 import re
 from sharingan.core.utils import DeobfuscateUtils
-from sharingan.base.obfuscatedregion import ObfuscatedRegion
+from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 
 
 class APIHammering(Deobfuscator):
@@ -31,7 +31,7 @@ class APIHammering(Deobfuscator):
         if not is_32bit:
             print('Only support 32 bit')
             return
-        
+
         self.range_start = start_ea
         self.range_end = end_ea
         if self.chk_pointer.isChecked():
@@ -61,7 +61,7 @@ class APIHammering(Deobfuscator):
 
     def enumerate_xref(self, api_addr, name_api, ord_api):
         self.possible_obfuscation_regions.clear()
-        # ida auto regconize calling register is calling api via calculating 
+        # ida auto regconize calling register is calling api via calculating
         code_refs = list(idautils.CodeRefsTo(api_addr, 0))
         # directly call from data segment
         data_refs = list(idautils.DataRefsTo(api_addr))
@@ -70,7 +70,7 @@ class APIHammering(Deobfuscator):
             # exclude mov register, pointer_api
             if not DeobfuscateUtils.is_call(addr_call) or not (self.range_start <= addr_call < self.range_end):
                 continue
-            
+
             info_func = idaapi.get_func(addr_call)
             func_start = idaapi.get_func(addr_call).start_ea if info_func else idaapi.getseg(addr_call).start_ea
             func_end = idaapi.get_func(addr_call).end_ea if info_func else idaapi.getseg(addr_call).end_ea
@@ -79,17 +79,17 @@ class APIHammering(Deobfuscator):
                 # collect call
                 len_call = idaapi.get_item_size(addr_call)
                 possible_region = ObfuscatedRegion(start_ea = addr_call, end_ea = addr_call + len_call, obfus_size = len_call,
-                                                    comment = idaapi.tag_remove(idaapi.generate_disasm_line(addr_call, 0)), 
-                                                    patch_bytes = len_call * b'\x90', name = 'apihammering')
+                                                    comment = idaapi.tag_remove(idaapi.generate_disasm_line(addr_call, 0)),
+                                                    patch_bytes = len_call * b'\x90', name = 'apihammering', action = Action.PATCH)
                 prev_addr = addr_call
                 # find push or mov instruction init param of api via sp
                 while func_start <= prev_addr < func_end and param_count > 0:
                     prev_addr = idaapi.prev_head(prev_addr, 0)
                     if DeobfuscateUtils.is_push(prev_addr):
                         len_push = idaapi.get_item_size(prev_addr)
-                        possible_region.append_obfu(start_ea = prev_addr, end_ea = prev_addr + len_push, obfus_size = len_push, 
-                                                    comment = idaapi.tag_remove(idaapi.generate_disasm_line(prev_addr, 0)), 
-                                                    patch_bytes = len_push * b'\x90')
+                        possible_region.append_obfu(start_ea = prev_addr, end_ea = prev_addr + len_push, obfus_size = len_push,
+                                                    comment = idaapi.tag_remove(idaapi.generate_disasm_line(prev_addr, 0)),
+                                                    patch_bytes = len_push * b'\x90', action = Action.PATCH)
                         param_count -= 1
                     elif DeobfuscateUtils.is_call(prev_addr):
                         idaapi.set_cmt(addr_call, 'Manually patch push instruction',0)

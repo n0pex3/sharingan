@@ -19,7 +19,7 @@ class HintDialog(QDialog):
         super().__init__()
         self.setWindowTitle(f"Input hint")
         self.layout = QVBoxLayout()
-        
+
         self.txt_hint = QLineEdit()
         self.btn_ok = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         self.btn_ok.accepted.connect(self.accept)
@@ -27,7 +27,7 @@ class HintDialog(QDialog):
         self.layout.addWidget(self.txt_hint)
         self.layout.addWidget(self.btn_ok)
         self.setLayout(self.layout)
-    
+
     def get_hint(self):
         return self.txt_hint.text()
 
@@ -108,7 +108,7 @@ class HandlerFilter(idaapi.action_handler_t):
             self.recipe.add_ingredient_substitute(self.start_ea, self.end_ea)
         else:
             print('Please run plugin first')
-    
+
     def update(self, ctx):
         return idaapi.AST_ENABLE_ALWAYS
 

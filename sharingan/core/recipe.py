@@ -4,6 +4,7 @@ from sharingan.base.dragdroprecipe import DragDropRecipe
 from sharingan.core.stylesmanager import ManageStyleSheet
 from sharingan.core.utils import DeobfuscateUtils
 from sharingan.base.ingredient import Decryption, Deobfuscator
+from sharingan.base.obfuscatedregion import Action, ListObfuscatedRegion
 import ida_bytes, idaapi, idc
 
 
@@ -217,10 +218,13 @@ class Recipe(QWidget):
                 print(ingredient.name, 'wrong mode')
                 return
 
-            print('Done', ingredient.description)
             found_regions = ingredient.scan(self.start_ea, self.end_ea)
             if not found_regions:
                 continue
+            elif type(found_regions) is not ListObfuscatedRegion:
+                print(f"Module {ingredient.name} return invalid type ListObfuscatedRegion")
+                return
+            print('Done', ingredient.description)
 
             self.obfuscated_regions.append(found_regions)
             for r in found_regions:
@@ -411,39 +415,42 @@ class Recipe(QWidget):
         for list_regions in self.obfuscated_regions:
             for r in list_regions:
                 for reg in r.regions:
-                    start_ea = reg.start_ea
-                    end_ea = reg.end_ea
-                    start_index_bookmark = self.count_manual_bookmark + 2
-                    end_index_bookmark = self.cmb_bookmark.count()
-                    # remove bookmark
-                    index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
-                    if index_bookmark:
-                        self.cmb_bookmark.removeItem(index_bookmark)
+                    if Action.CMT:
+                        idaapi.set_cmt(reg.start_ea, reg.comment, 0)
+                    elif Action.PATCH:
+                        start_ea = reg.start_ea
+                        end_ea = reg.end_ea
+                        start_index_bookmark = self.count_manual_bookmark + 2
+                        end_index_bookmark = self.cmb_bookmark.count()
+                        # remove bookmark
+                        index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
+                        if index_bookmark:
+                            self.cmb_bookmark.removeItem(index_bookmark)
 
-                    # patching
-                    patch_bytes = bytes(reg.patch_bytes)
-                    DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
-                    DeobfuscateUtils.patch_bytes(start_ea, patch_bytes)
-                    DeobfuscateUtils.mark_as_code(start_ea, end_ea)
-
-                    # color region
-                    # raw insn equal 1 insn
-                    if DeobfuscateUtils.is_all_nop(patch_bytes):
-                        idaapi.del_item_color(start_ea)
-                        idaapi.add_hidden_range(start_ea, end_ea, reg.comment, '', '', Color.BG_PATCH_HIDDEN)
-                    # greater than 1 insn
-                    else:
-                        nop_ea = start_ea
-                        while nop_ea < end_ea:
-                            if DeobfuscateUtils.is_nop(nop_ea):
-                                break
-                            idc.set_color(nop_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
-                            nop_ea = idaapi.next_head(nop_ea, idaapi.BADADDR)
-
+                        # patching
+                        patch_bytes = bytes(reg.patch_bytes)
+                        DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
+                        DeobfuscateUtils.patch_bytes(start_ea, patch_bytes)
                         DeobfuscateUtils.mark_as_code(start_ea, end_ea)
-                        idaapi.del_item_color(nop_ea)
-                        idaapi.add_hidden_range(nop_ea, end_ea, 'NOP', '', '', Color.BG_PATCH_HIDDEN)
-                        self.hint_hook.insert_hint(start_ea, reg.comment)
+
+                        # color region
+                        # raw insn equal 1 insn
+                        if DeobfuscateUtils.is_all_nop(patch_bytes):
+                            idaapi.del_item_color(start_ea)
+                            idaapi.add_hidden_range(start_ea, end_ea, reg.comment, '', '', Color.BG_PATCH_HIDDEN)
+                        # greater than 1 insn
+                        else:
+                            nop_ea = start_ea
+                            while nop_ea < end_ea:
+                                if DeobfuscateUtils.is_nop(nop_ea):
+                                    break
+                                idc.set_color(nop_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
+                                nop_ea = idaapi.next_head(nop_ea, idaapi.BADADDR)
+
+                            DeobfuscateUtils.mark_as_code(start_ea, end_ea)
+                            idaapi.del_item_color(nop_ea)
+                            idaapi.add_hidden_range(nop_ea, end_ea, 'NOP', '', '', Color.BG_PATCH_HIDDEN)
+                            self.hint_hook.insert_hint(start_ea, reg.comment)
 
         DeobfuscateUtils.refresh_view()
         active_index = self.disassembler.currentIndex()

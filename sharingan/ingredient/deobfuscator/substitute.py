@@ -2,7 +2,7 @@ import idaapi, ida_bytes
 from sharingan.base.ingredient import Deobfuscator
 from PySide6.QtWidgets import QTextEdit, QLineEdit, QHBoxLayout
 from sharingan.core.utils import DeobfuscateUtils
-from sharingan.base.obfuscatedregion import ObfuscatedRegion
+from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 
 
 class Substitute(Deobfuscator):
@@ -96,11 +96,9 @@ class Substitute(Deobfuscator):
             current_addr = pos_replaced_instr + len_bytes_pattern_find_str
             if pos_replaced_instr != idaapi.BADADDR:
                 cmt = '\n'.join(comment)
-                possible_region = ObfuscatedRegion(start_ea = pos_replaced_instr, end_ea = pos_replaced_instr + len_bytes_pattern_find_str, 
-                                                    obfus_size = len_bytes_pattern_find_str, comment = cmt, patch_bytes = arr_replace_bytes, 
-                                                    name = 'substitution')
+                possible_region = ObfuscatedRegion(start_ea = pos_replaced_instr, end_ea = pos_replaced_instr + len_bytes_pattern_find_str,
+                                                    obfus_size = len_bytes_pattern_find_str, comment = cmt, patch_bytes = arr_replace_bytes,
+                                                    name = 'substitution', action = Action.PATCH)
                 self.possible_obfuscation_regions.append(possible_region)
 
         return self.possible_obfuscation_regions
-
-

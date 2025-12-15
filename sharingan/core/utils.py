@@ -40,6 +40,10 @@ class DeobfuscateUtils:
         return compiled_pattern
 
     @staticmethod
+    def is_jmp(addr):
+        return idc.print_insn_mnem(addr).startswith('j')
+
+    @staticmethod
     def is_call(addr):
         call_insn = set((idaapi.NN_call, idaapi.NN_callfi, idaapi.NN_callni))
         instr = idaapi.insn_t()
