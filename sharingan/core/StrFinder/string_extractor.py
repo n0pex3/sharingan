@@ -27,6 +27,9 @@ import ida_nalt
 import contextlib
 
 ASCII_BYTE = rb" !\"#\$%&\'\(\)\*\+,-\./0123456789:;<=>\?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\[\]\^_`abcdefghijklmnopqrstuvwxyz\{\|\}\\\~\t"
+ASCII_RE_4 = re.compile(rb"([%s]{4,})" % (ASCII_BYTE))
+UNICODE_RE_4 = re.compile(rb"((?:[%s]\x00){4,})" % (ASCII_BYTE))
+
 REPEATS = ["A", "\x00", "\xfe", "\xff", " "]
 PRINTABLE_BYTES = {0x09, 0x0A, 0x0D} | set(range(0x20, 0x7F))
 FUZZY_MAX_NONPRINTABLE = int(os.getenv('ESF_FUZZY_MAX_BAD', '2'))
@@ -58,33 +61,6 @@ class FLOSSStringExtractor:
         ret: List[Dict] = []
         seen_addrs: Set[int] = set()
 
-        # Enumerate mapped segments
-        segments: List[tuple] = []
-        rsrc_seg = None
-        for seg_ea in idautils.Segments():
-            seg = ida_segment.getseg(seg_ea)
-            if not seg:
-                continue
-            name = ida_segment.get_segm_name(seg) or f"SEG_{seg.start_ea:08X}"
-            segments.append((seg, name))
-            if name.lower().strip('.') == 'rsrc':
-                rsrc_seg = seg
-
-        # for seg, name in segments:
-        #     ret.extend(self._scan_segment_for_strings(seg, name, seen_addrs))
-            # ret.extend(self._scan_fuzzy_ascii_sequences(seg, name, seen_addrs))
-
-        # Disk-based .rsrc fallback if not mapped
-        if not rsrc_seg:
-            disk_rsrc = self.extract_rsrc_from_disk()
-            if disk_rsrc:
-                for item in disk_rsrc:
-                    addr = item['address']
-                    if addr in seen_addrs:
-                        continue
-                    seen_addrs.add(addr)
-                    ret.append(item)
-
         # Add IDA-recognized strings themselves
         for s in idautils.Strings():
             val = str(s)
@@ -101,6 +77,31 @@ class FLOSSStringExtractor:
                     'xrefs': xrefs,
                     'xref_count': len(xrefs)
                 })
+        
+        # Enumerate mapped segments
+        segments: List[tuple] = []
+        rsrc_seg = None
+        for seg_ea in idautils.Segments():
+            seg = ida_segment.getseg(seg_ea)
+            if not seg:
+                continue
+            name = ida_segment.get_segm_name(seg) or f"SEG_{seg.start_ea:08X}"
+            segments.append((seg, name))
+            if name.strip('.') == 'rsrc':
+                rsrc_seg = seg
+            
+            ret.extend(self._scan_segment_for_strings(seg, name, seen_addrs))
+
+        # Disk-based .rsrc fallback if not mapped
+        if not rsrc_seg:
+            disk_rsrc = self.extract_rsrc_from_disk()
+            if disk_rsrc:
+                for item in disk_rsrc:
+                    addr = item['address']
+                    if addr in seen_addrs:
+                        continue
+                    seen_addrs.add(addr)
+                    ret.append(item)
 
         return ret
 
@@ -118,10 +119,14 @@ class FLOSSStringExtractor:
             data = None
         if not data:
             return results
-
-        seg_type = 'segment'
         
-        ascii_pat = re.compile(rb'([%s]{%d,})' % (ASCII_BYTE, self.min_length,))
+        if self.min_length == 4:
+            ascii_pat = ASCII_RE_4
+            unicode_pat = UNICODE_RE_4
+        else:
+            ascii_pat = re.compile(rb'([%s]{%d,})' % (ASCII_BYTE, self.min_length))
+            unicode_pat = re.compile(rb'((?:[%s]\x00){%d,})' % (ASCII_BYTE, self.min_length))
+        
         for match in ascii_pat.finditer(data):
             addr = start + match.start()
             if addr in seen_addrs:
@@ -137,14 +142,13 @@ class FLOSSStringExtractor:
             results.append({
                 'address': addr,
                 'value': val,
-                'type': f"{seg_type}-ascii",
+                'type': f"ascii-static",
                 'segment': name,
                 'encoding': 'ascii',
                 'xrefs': xrefs,
                 'xref_count': len(xrefs)
             })
 
-        unicode_pat = re.compile(rb'((?:[%s]\x00){%d,})' % (ASCII_BYTE, self.min_length))
         for match in unicode_pat.finditer(data):
             addr = start + match.start()
             if addr in seen_addrs:
@@ -160,7 +164,7 @@ class FLOSSStringExtractor:
             results.append({
                 'address': addr,
                 'value': val,
-                'type': f"{seg_type}-unicode",
+                'type': f"unicode-static",
                 'segment': name,
                 'encoding': 'utf-16le',
                 'xrefs': xrefs,

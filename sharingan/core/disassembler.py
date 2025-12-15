@@ -431,6 +431,7 @@ class DisassembleTab(QWidget):
         self.string_results = []
         self.string_row_checkboxes = []
         self._last_checkbox_row = None
+        self.decryption_runner = None
         try:
             self.string_finder = StringFinder()
         except Exception as exc:
@@ -730,7 +731,40 @@ class DisassembleTab(QWidget):
         return True
 
     def apply_strings_decrypt(self):
-        print('[Sharingan] Export report is not implemented yet.')
+        if not self.string_results:
+            idaapi.msg('[Sharingan] No strings available to decrypt.\n')
+            return
+
+        selected_rows = self._get_selected_string_rows()
+        if not selected_rows:
+            idaapi.msg('[Sharingan] Please select at least one string to decrypt.\n')
+            return
+
+        if not callable(self.decryption_runner):
+            idaapi.msg('[Sharingan] No decryption pipeline configured. Please add decryption ingredients first.\n')
+            return
+
+        raw_values = []
+        for row in selected_rows:
+            if 0 <= row < len(self.string_results):
+                raw_values.append(self.string_results[row].get('value', '') or '')
+            else:
+                raw_values.append('')
+
+        try:
+            decrypted_values = self.decryption_runner(raw_values) or raw_values
+        except Exception as exc:
+            idaapi.msg(f'[Sharingan] Decryption failed: {exc}\n')
+            return
+
+        for idx, row in enumerate(selected_rows):
+            value = decrypted_values[idx] if idx < len(decrypted_values) else raw_values[idx]
+            if 0 <= row < len(self.string_results):
+                self.string_results[row]['preview'] = value
+                self.string_results[row]['decrypted'] = value
+            self.tbl_string.setItem(row, 4, self._make_table_item(value))
+
+        idaapi.msg(f'[Sharingan] Decrypted {len(selected_rows)} string(s).\n')
 
     def change_mode_code_string(self, index):
         mode = self.cmb_mode.itemText(index)
@@ -807,6 +841,9 @@ class DisassembleTab(QWidget):
     def set_signal_filter(self, signal_filter):
         self.asm_view.set_signal_filter(signal_filter)
 
+    def set_decryption_runner(self, runner):
+        self.decryption_runner = runner
+
     def clear_asmview(self):
         self.asm_view.ClearLines()
 
@@ -833,6 +870,7 @@ class Disassembler(QTabWidget):
         self.setStyleSheet(ManageStyleSheet.get_stylesheet())
         self.tab_contents = []
         self.signal_filter = None
+        self.decryption_runner = None
         self.add_new_tab()
 
     def setup_ui(self):
@@ -846,12 +884,18 @@ class Disassembler(QTabWidget):
         self.signal_filter = signal_filter
         self.tab_contents[self.currentIndex()].set_signal_filter(self.signal_filter)
 
+    def set_tab_decryption_runner(self, runner):
+        self.decryption_runner = runner
+        self.tab_contents[self.currentIndex()].set_decryption_runner(runner)
+
     def add_new_tab(self):
         tab_content = DisassembleTab(self)
         self.addTab(tab_content, f"Tab {self.count() + 1}")
         self.tab_contents.append(tab_content)
         if self.signal_filter:
             tab_content.set_signal_filter(self.signal_filter)
+        if self.decryption_runner:
+            tab_content.set_decryption_runner(self.decryption_runner)
 
     def close_tab(self, index):
         if self.count() > 1:

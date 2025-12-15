@@ -83,6 +83,8 @@ class Recipe(QWidget):
         self.disassembler = disassembler
         self.signal_filter = FilterSignal()
         self.disassembler.set_tab_signal_filter(self.signal_filter)
+        if hasattr(self.disassembler, 'set_tab_decryption_runner'):
+            self.disassembler.set_tab_decryption_runner(self.run_decryption)
         self.signal_filter.filter_.connect(self.add_ingredient_substitute)
 
         self.setup_ui()
@@ -271,6 +273,37 @@ class Recipe(QWidget):
 
             print('Done', ingredient.description)
             ingredient.preview()
+
+    def _get_active_decryption_pipeline(self):
+        pipeline = []
+        for i in range(self.list_recipe.count()):
+            item = self.list_recipe.item(i)
+            if not item:
+                continue
+            widget = self.list_recipe.itemWidget(item)
+            if isinstance(widget, Decryption) and not widget.chk_active.isChecked():
+                pipeline.append(widget)
+        return pipeline
+
+    def run_decryption(self, raw_values):
+        pipeline = self._get_active_decryption_pipeline()
+        if not raw_values:
+            return []
+        if not pipeline:
+            return raw_values
+        results = []
+        for raw in raw_values:
+            current = raw
+            for step in pipeline:
+                try:
+                    print('before decrypt', current)
+                    current = step.decrypt(current)
+                    print('after decrypt', current)
+                except Exception as exc:
+                    print(f"{step.name} decrypt failed: {exc}")
+                    break
+            results.append(current)
+        return results
 
     def preview(self):
         if self.list_recipe.mode == 'deobfuscator':
