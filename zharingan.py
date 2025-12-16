@@ -26,7 +26,7 @@ class Sharingan(idaapi.plugin_t):
     flags = idaapi.PLUGIN_KEEP
     comment = 'Assist and ease obfuscation'
     wanted_name = 'Sharingan'
-    wanted_hotkey = ''
+    wanted_hotkey = 'Alt-F9'
     help = ''
 
     def init(self):

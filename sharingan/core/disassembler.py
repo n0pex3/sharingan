@@ -431,6 +431,7 @@ class DisassembleTab(QWidget):
         self.string_results = []
         self.string_row_checkboxes = []
         self._last_checkbox_row = None
+        self.decryption_runner = None
         try:
             self.string_finder = StringFinder()
         except Exception as exc:
@@ -490,13 +491,10 @@ class DisassembleTab(QWidget):
         self.btn_scan_code.clicked.connect(self.scan_code_strings)
         self.btn_ignore_strings = QPushButton('Ignore', self)
         self.btn_ignore_strings.clicked.connect(self.ignore_selected_strings)
-        self.btn_export_report = QPushButton('Apply', self)
-        self.btn_export_report.clicked.connect(self.apply_strings_decrypt)
 
         button_bar = QHBoxLayout()
         button_bar.addWidget(self.btn_scan_code)
         button_bar.addWidget(self.btn_ignore_strings)
-        button_bar.addWidget(self.btn_export_report)
         button_bar.addStretch()
         layout.addLayout(button_bar)
 
@@ -601,8 +599,38 @@ class DisassembleTab(QWidget):
         if 0 <= row < self.tbl_string.rowCount():
             self.tbl_string.selectRow(row)
 
-    def _handle_cell_clicked(self, row: int, _column: int):
+    def _handle_cell_clicked(self, row: int, column: int):
         self.tbl_string.selectRow(row)
+        if column == 5:
+            self._print_xrefs_for_row(row)
+
+    def _print_xrefs_for_row(self, row: int):
+        if not (0 <= row < len(self.string_results)):
+            idaapi.msg("[Sharingan] No xref data for this row.\n")
+            return
+        entry = self.string_results[row]
+        if not isinstance(entry, dict):
+            idaapi.msg("[Sharingan] No xref data for this row.\n")
+            return
+
+        def _normalize_ea(value):
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str):
+                try:
+                    return int(value, 16) if value.lower().startswith("0x") else int(value)
+                except ValueError:
+                    return None
+            return None
+
+        raw_xrefs = entry.get('xrefs') or []
+        normalized = [ea for ea in (_normalize_ea(x) for x in raw_xrefs) if ea is not None]
+        if not normalized:
+            idaapi.msg("[Sharingan] No xrefs recorded for the selected string.\n")
+            return
+
+        formatted = ', '.join(f"0x{ea:08X}" for ea in normalized)
+        idaapi.msg(f"[Sharingan] Xrefs for row {row + 1}: {formatted}\n")
 
     def _update_checkbox_header_label(self):
         if not hasattr(self, 'checkbox_header_button'):
@@ -635,12 +663,70 @@ class DisassembleTab(QWidget):
         self.checkbox_header_container.setGeometry(x, 0, width, header.height())
         self.checkbox_header_container.show()
 
-    def _get_selected_string_rows(self):
+    def get_selected_string_rows(self):
         selected_rows = []
         for idx, checkbox in enumerate(self.string_row_checkboxes):
             if checkbox.isEnabled() and checkbox.isChecked():
                 selected_rows.append(idx)
         return selected_rows
+
+    def get_string_table_snapshot(self):
+        if not self.string_results:
+            return []
+        snapshot = []
+        for item in self.string_results:
+            if isinstance(item, dict):
+                snapshot.append((item.get('value', ''), item.get('address')))
+            else:
+                snapshot.append((item, None))
+        return snapshot
+
+    def _apply_preview_to_row(self, row: int, preview_value) -> bool:
+        if not (0 <= row < len(self.string_results)):
+            return False
+        entry = self.string_results[row]
+        if isinstance(entry, dict):
+            entry['preview'] = preview_value
+        text = str(preview_value)
+        table_item = self.tbl_string.item(row, 4)
+        if table_item:
+            table_item.setText(text)
+            table_item.setToolTip(text)
+        else:
+            self.tbl_string.setItem(row, 4, self._make_table_item(text, tooltip=text))
+        return True
+
+    def update_preview_at_location(self, ea, preview_value):
+        if ea is None or not self.string_results:
+            return False
+
+        def _normalize_address(value):
+            if value is None:
+                return None
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str):
+                try:
+                    return int(value, 16) if value.lower().startswith('0x') else int(value)
+                except ValueError:
+                    return None
+            return None
+
+        target = _normalize_address(ea)
+        if target is None:
+            return False
+
+        updated = False
+        for row, entry in enumerate(self.string_results):
+            current = _normalize_address(entry.get('address') if isinstance(entry, dict) else None)
+            if current != target:
+                continue
+            if self._apply_preview_to_row(row, preview_value):
+                updated = True
+        return updated
+
+    def update_preview_row(self, row_index: int, preview_value):
+        return self._apply_preview_to_row(row_index, preview_value)
 
     def scan_code_strings(self):
         if self.string_finder is None:
@@ -679,15 +765,15 @@ class DisassembleTab(QWidget):
             idx_item = self._make_table_item(str(row + 1), align=Qt.AlignCenter)
             raw_value = item.get('value', '')
             address = item.get('address', 0)
-            preview_value = item.get('preview') or item.get('decrypted') or raw_value
+            preview_value = item.get('preview') or raw_value
             xref_list = item.get('xrefs') or []
             xref_text = '\n'.join(f"0x{ea:08X}" for ea in xref_list) if xref_list else '0'
 
             self.tbl_string.setItem(row, 1, idx_item)
             self.tbl_string.setItem(row, 2, self._make_table_item(raw_value, tooltip=raw_value))
             self.tbl_string.setItem(row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter))
-            self.tbl_string.setItem(row, 4, self._make_table_item(preview_value))
-            self.tbl_string.setItem(row, 5, self._make_table_item(xref_text))
+            self.tbl_string.setItem(row, 4, self._make_table_item(preview_value, tooltip=preview_value))
+            self.tbl_string.setItem(row, 5, self._make_table_item(xref_text, tooltip=xref_text))
             self._add_checkbox_to_row(row)
 
         self.tbl_string.setUpdatesEnabled(True)
@@ -698,7 +784,7 @@ class DisassembleTab(QWidget):
         if not self.string_results:
             idaapi.msg('[Sharingan] No strings available to ignore.\n')
             return
-        selected_rows = self._get_selected_string_rows()
+        selected_rows = self.get_selected_string_rows()
         if not selected_rows:
             idaapi.msg('[Sharingan] Please select at least one string to ignore.\n')
             return
@@ -728,9 +814,6 @@ class DisassembleTab(QWidget):
             return False
         self.string_finder.result_filter.ignore_literals.update(new_literals)
         return True
-
-    def apply_strings_decrypt(self):
-        print('[Sharingan] Export report is not implemented yet.')
 
     def change_mode_code_string(self, index):
         mode = self.cmb_mode.itemText(index)
@@ -807,6 +890,9 @@ class DisassembleTab(QWidget):
     def set_signal_filter(self, signal_filter):
         self.asm_view.set_signal_filter(signal_filter)
 
+    def set_decryption_runner(self, runner):
+        self.decryption_runner = runner
+
     def clear_asmview(self):
         self.asm_view.ClearLines()
 
@@ -833,6 +919,7 @@ class Disassembler(QTabWidget):
         self.setStyleSheet(ManageStyleSheet.get_stylesheet())
         self.tab_contents = []
         self.signal_filter = None
+        self.decryption_runner = None
         self.add_new_tab()
 
     def setup_ui(self):
@@ -842,9 +929,28 @@ class Disassembler(QTabWidget):
         self.btn_add_tab.clicked.connect(self.add_new_tab)
         self.setCornerWidget(self.btn_add_tab, Qt.TopRightCorner)
 
+    def _current_tab(self):
+        idx = self.currentIndex()
+        if 0 <= idx < len(self.tab_contents):
+            return self.tab_contents[idx]
+        return None
+
+    @property
+    def tbl_string(self):
+        tab = self._current_tab()
+        return tab.get_string_table_snapshot() if tab else []
+
+    def update_preview_for_row(self, row_idx, preview_value):
+        tab = self._current_tab()
+        return tab.update_preview_row(row_idx, preview_value) if tab else False
+
     def set_tab_signal_filter(self, signal_filter):
         self.signal_filter = signal_filter
         self.tab_contents[self.currentIndex()].set_signal_filter(self.signal_filter)
+
+    def set_tab_decryption_runner(self, runner):
+        self.decryption_runner = runner
+        self.tab_contents[self.currentIndex()].set_decryption_runner(runner)
 
     def add_new_tab(self):
         tab_content = DisassembleTab(self)
@@ -852,11 +958,23 @@ class Disassembler(QTabWidget):
         self.tab_contents.append(tab_content)
         if self.signal_filter:
             tab_content.set_signal_filter(self.signal_filter)
+        if self.decryption_runner:
+            tab_content.set_decryption_runner(self.decryption_runner)
 
     def close_tab(self, index):
         if self.count() > 1:
             self.removeTab(index)
             self.tab_contents.pop(index)
+
+    def get_selected_string_indices(self):
+        tab = self._current_tab()
+        return tab.get_selected_string_rows() if tab else []
+
+    def update_preview_at_location(self, ea, preview_value):
+        tab = self._current_tab()
+        if not tab:
+            return False
+        return tab.update_preview_at_location(ea, preview_value)
 
     def get_tab_line_edit_texts(self, index):
         return self.tab_contents[index].get_line_edit_texts() if self.tab_contents[index] else []
