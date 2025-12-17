@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QComboBox, QFormLayout, QLineEdit
 from sharingan.base.ingredient import Decryption
+from sharingan.core.utils import DecryptionUtils
 
 try:
     from Crypto.Cipher import DES as _DES  # type: ignore
@@ -41,12 +42,12 @@ class Des(Decryption):
         if _DES is None:
             raise RuntimeError("PyCryptodome DES cipher is not available.")
 
-        data = self.normalize_bytes(raw)
-        key = self._normalize_key(self.parse_byte_sequence(self.key_input.text(), fallback=b""))
+        data = DecryptionUtils.normalize_bytes(raw)
+        key = self._normalize_key(DecryptionUtils.parse_byte_sequence(self.key_input.text(), fallback=b""))
         mode = self.mode_combo.currentText().upper()
 
         if mode == "CBC":
-            iv = self.parse_byte_sequence(self.iv_input.text(), fallback=b"")
+            iv = DecryptionUtils.parse_byte_sequence(self.iv_input.text(), fallback=b"")
             if len(iv) not in (0, 8):
                 iv = iv.ljust(8, b"\x00")[:8]
             elif len(iv) == 0:
@@ -56,9 +57,9 @@ class Des(Decryption):
             cipher = _DES.new(key, _DES.MODE_ECB)
 
         block_size = _DES.block_size
-        aligned = self.ensure_block_multiple(data, block_size)
+        aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
         decrypted = cipher.decrypt(aligned)
-        return self.to_preview_string(decrypted)
+        return DecryptionUtils.to_preview_string(decrypted)
 
     @staticmethod
     def _normalize_key(key: bytes) -> bytes:
