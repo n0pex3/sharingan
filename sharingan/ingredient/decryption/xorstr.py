@@ -1,18 +1,16 @@
 from PySide6.QtWidgets import QFormLayout, QLineEdit
-
 from sharingan.base.ingredient import Decryption
 
-
-class Sub(Decryption):
-    """Subtractive byte-wise decryption (key - cipher)."""
+class Xorstr(Decryption):
+    """XOR with repeating multi-byte key."""
 
     def __init__(self):
-        super().__init__("Sub")
-        self.description = "Key minus cipher"
+        super().__init__("XorStr")
+        self.description = "XOR string key"
         self.version = "1.0"
 
         self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("Key (e.g., 0x41)")
+        self.key_input.setPlaceholderText("Key bytes (e.g., 0x414243 or ABC)")
 
         form = QFormLayout()
         form.addRow("Key", self.key_input)
@@ -20,8 +18,11 @@ class Sub(Decryption):
 
     def decrypt(self, raw):
         data = bytearray(self.normalize_bytes(raw))
-        key = self.clamp_key(self.parse_key(self.key_input.text(), default=0))
+        key_bytes = self.parse_byte_sequence(self.key_input.text(), fallback=b"\x00")
+        if not key_bytes:
+            key_bytes = b"\x00"
+        klen = len(key_bytes)
         for idx, value in enumerate(data):
-            data[idx] = (key - value) & 0xFF
+            data[idx] = value ^ key_bytes[idx % klen]
         return self.to_preview_string(bytes(data))
 

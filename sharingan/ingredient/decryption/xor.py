@@ -1,7 +1,5 @@
 from PySide6.QtWidgets import QFormLayout, QLineEdit
-
 from sharingan.base.ingredient import Decryption
-
 
 class Xor(Decryption):
     def __init__(self):
@@ -22,6 +20,3 @@ class Xor(Decryption):
         for byte_val in data:
             out.append(byte_val ^ key)
         return self.to_preview_string(out)
-
-    def preview(self):
-        return self.decrypt("")
