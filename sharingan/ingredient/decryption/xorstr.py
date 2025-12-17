@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QFormLayout, QLineEdit
 from sharingan.base.ingredient import Decryption
+from sharingan.core.utils import DecryptionUtils
 
 class Xorstr(Decryption):
     """XOR with repeating multi-byte key."""
@@ -17,12 +18,12 @@ class Xorstr(Decryption):
         self.layout_body.addLayout(form)
 
     def decrypt(self, raw):
-        data = bytearray(self.normalize_bytes(raw))
-        key_bytes = self.parse_byte_sequence(self.key_input.text(), fallback=b"\x00")
+        data = bytearray(DecryptionUtils.normalize_bytes(raw))
+        key_bytes = DecryptionUtils.parse_byte_sequence(self.key_input.text(), fallback=b"\x00")
         if not key_bytes:
             key_bytes = b"\x00"
         klen = len(key_bytes)
         for idx, value in enumerate(data):
             data[idx] = value ^ key_bytes[idx % klen]
-        return self.to_preview_string(bytes(data))
+        return DecryptionUtils.to_preview_string(bytes(data))
 

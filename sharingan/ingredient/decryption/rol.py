@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QFormLayout, QSpinBox
 from sharingan.base.ingredient import Decryption
+from sharingan.core.utils import DecryptionUtils
 
 class Rol(Decryption):
     """Rotate each byte left by N bits."""
@@ -26,10 +27,10 @@ class Rol(Decryption):
         return ((value << shift) | (value >> (width - shift))) & mask
 
     def decrypt(self, raw):
-        data = bytearray(self.normalize_bytes(raw))
+        data = bytearray(DecryptionUtils.normalize_bytes(raw))
         shift = self.shift_spin.value() % 8
         if not data or shift == 0:
-            return self.to_preview_string(bytes(data))
+            return DecryptionUtils.to_preview_string(bytes(data))
         for idx, value in enumerate(data):
             data[idx] = self._rotl(value, shift, 8)
-        return self.to_preview_string(bytes(data))
+        return DecryptionUtils.to_preview_string(bytes(data))

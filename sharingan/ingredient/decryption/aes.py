@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QComboBox, QFormLayout, QLineEdit
 from sharingan.base.ingredient import Decryption
+from sharingan.core.utils import DecryptionUtils
 
 try:
     from Crypto.Cipher import AES as _AES  # type: ignore
@@ -41,12 +42,12 @@ class Aes(Decryption):
         if _AES is None:
             raise RuntimeError("PyCryptodome AES cipher is not available.")
 
-        data = self.normalize_bytes(raw)
-        key = self._normalize_aes_key(self.parse_byte_sequence(self.key_input.text(), fallback=b""))
+        data = DecryptionUtils.normalize_bytes(raw)
+        key = self._normalize_aes_key(DecryptionUtils.parse_byte_sequence(self.key_input.text(), fallback=b""))
         mode = self.mode_combo.currentText().upper()
 
         if mode == "CBC":
-            iv = self.parse_byte_sequence(self.iv_input.text(), fallback=b"")
+            iv = DecryptionUtils.parse_byte_sequence(self.iv_input.text(), fallback=b"")
             if len(iv) not in (0, 16):
                 iv = iv.ljust(16, b"\x00")[:16]
             elif len(iv) == 0:
@@ -56,9 +57,9 @@ class Aes(Decryption):
             cipher = _AES.new(key, _AES.MODE_ECB)
 
         block_size = _AES.block_size
-        aligned = self.ensure_block_multiple(data, block_size)
+        aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
         decrypted = cipher.decrypt(aligned)
-        return self.to_preview_string(decrypted)
+        return DecryptionUtils.to_preview_string(decrypted)
 
     @staticmethod
     def _normalize_aes_key(key: bytes) -> bytes:

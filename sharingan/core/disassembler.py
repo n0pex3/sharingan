@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QApplication, QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QComboBox, QTableWidget, QTableWidgetItem, QStackedWidget, QHeaderView, QAbstractItemView, QCheckBox, QToolButton
+from PySide6.QtWidgets import QApplication, QTabWidget, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QComboBox, QTableWidget, QTableWidgetItem, QStackedWidget, QHeaderView, QAbstractItemView, QCheckBox, QToolButton, QMenu
+from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt, QTimer
 from sharingan.core.stylesmanager import ManageStyleSheet
 import idaapi, ida_bytes, ida_hexrays, ida_kernwin
@@ -528,8 +529,9 @@ class DisassembleTab(QWidget):
         header.sectionResized.connect(self._position_checkbox_header_button)
         header.sectionMoved.connect(self._position_checkbox_header_button)
         header.geometriesChanged.connect(self._position_checkbox_header_button)
+        self.tbl_string.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tbl_string.customContextMenuRequested.connect(self._show_table_context_menu)
         self.tbl_string.horizontalScrollBar().valueChanged.connect(self._position_checkbox_header_button)
-        self.tbl_string.cellClicked.connect(self._handle_cell_clicked)
 
         layout.addWidget(self.tbl_string)
         self._initialize_string_table_placeholders()
@@ -599,12 +601,75 @@ class DisassembleTab(QWidget):
         if 0 <= row < self.tbl_string.rowCount():
             self.tbl_string.selectRow(row)
 
-    def _handle_cell_clicked(self, row: int, column: int):
+    def _show_table_context_menu(self, pos):
+        index = self.tbl_string.indexAt(pos)
+        if not index.isValid():
+            return
+        row = index.row()
+        col = index.column()
         self.tbl_string.selectRow(row)
-        if column == 5:
-            self._print_xrefs_for_row(row)
 
-    def _print_xrefs_for_row(self, row: int):
+        menu = QMenu(self.tbl_string)
+        if col == 2:
+            action = QAction("Copy Raw", menu)
+            action.triggered.connect(lambda: self._copy_to_clipboard(row, 'value'))
+            menu.addAction(action)
+        if col == 3:
+            action_copy = QAction("Copy Address", menu)
+            action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, 'address'))
+            menu.addAction(action_copy)
+            action_jump = QAction("Jump to Address", menu)
+            action_jump.triggered.connect(lambda: self._jump_to_address(row))
+            menu.addAction(action_jump)
+        if col == 4:
+            action = QAction("Copy Preview", menu)
+            action.triggered.connect(lambda: self._copy_to_clipboard(row, 'preview'))
+            menu.addAction(action)
+        if col == 5:
+            action_show = QAction("Show Xrefs", menu)
+            action_show.triggered.connect(lambda: self._print_xrefs(row))
+            menu.addAction(action_show)
+            action_copy = QAction("Copy Xrefs", menu)
+            action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, 'xrefs'))
+            menu.addAction(action_copy)
+
+        if menu.actions():
+            menu.exec_(self.tbl_string.viewport().mapToGlobal(pos))
+
+    def _copy_to_clipboard(self, row: int, field: str):
+        if not (0 <= row < len(self.string_results)):
+            return
+        entry = self.string_results[row]
+        if isinstance(entry, dict):
+            raw = entry.get(field, '')
+        else:
+            raw = entry
+        QApplication.clipboard().setText(str(raw))
+
+    def _jump_to_address(self, row: int):
+        if not (0 <= row < len(self.string_results)):
+            return
+        entry = self.string_results[row]
+        if isinstance(entry, dict):
+            address = entry.get('address')
+        else:
+            address = entry
+        idaapi.jumpto(address)
+
+    @staticmethod
+    def _normalize_ea(value):
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value, 16) if value.lower().startswith('0x') else int(value)
+            except ValueError:
+                return None
+        return None
+
+    def _print_xrefs(self, row: int):
         if not (0 <= row < len(self.string_results)):
             idaapi.msg("[Sharingan] No xref data for this row.\n")
             return
@@ -613,18 +678,8 @@ class DisassembleTab(QWidget):
             idaapi.msg("[Sharingan] No xref data for this row.\n")
             return
 
-        def _normalize_ea(value):
-            if isinstance(value, int):
-                return value
-            if isinstance(value, str):
-                try:
-                    return int(value, 16) if value.lower().startswith("0x") else int(value)
-                except ValueError:
-                    return None
-            return None
-
         raw_xrefs = entry.get('xrefs') or []
-        normalized = [ea for ea in (_normalize_ea(x) for x in raw_xrefs) if ea is not None]
+        normalized = [ea for ea in (self._normalize_ea(x) for x in raw_xrefs) if ea is not None]
         if not normalized:
             idaapi.msg("[Sharingan] No xrefs recorded for the selected string.\n")
             return

@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QFormLayout, QLineEdit
 
 from sharingan.base.ingredient import Decryption
+from sharingan.core.utils import DecryptionUtils
 
 
 class Sub(Decryption):
@@ -19,9 +20,9 @@ class Sub(Decryption):
         self.layout_body.addLayout(form)
 
     def decrypt(self, raw):
-        data = bytearray(self.normalize_bytes(raw))
-        key = self.clamp_key(self.parse_key(self.key_input.text(), default=0))
+        data = bytearray(DecryptionUtils.normalize_bytes(raw))
+        key = DecryptionUtils.clamp_key(DecryptionUtils.parse_key(self.key_input.text(), default=0))
         for idx, value in enumerate(data):
             data[idx] = (key - value) & 0xFF
-        return self.to_preview_string(bytes(data))
+        return DecryptionUtils.to_preview_string(bytes(data))
 
