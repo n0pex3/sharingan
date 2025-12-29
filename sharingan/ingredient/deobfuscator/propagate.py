@@ -72,7 +72,7 @@ class Propagate(Deobfuscator):
                 start_emu = self.start_ea
                 break
             elif start_emu == idaapi.BADADDR:
-                start_emu = imagebase
+                start_emu = self.imagebase
                 break
             elif DeobfuscateUtils.is_jmp(start_emu) or DeobfuscateUtils.is_call(start_emu):
                 start_emu = idaapi.next_head(start_emu, idaapi.BADADDR)

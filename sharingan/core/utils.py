@@ -54,14 +54,6 @@ class DeobfuscateUtils:
         return compiled_pattern
 
     @staticmethod
-    def is_nop(addr):
-        if not idaapi.is_head(idaapi.get_flags(ea)):
-            return False
-        instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_nop
-
-    @staticmethod
     def is_jmp(addr):
         return idc.print_insn_mnem(addr).startswith("j")
 
