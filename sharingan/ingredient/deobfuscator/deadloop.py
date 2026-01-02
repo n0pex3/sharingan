@@ -5,17 +5,28 @@ from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 
 
-class RangeScanner(ida_hexrays.ctree_visitor_t):
-    def __init__(self):
+class BlockScanner(ida_hexrays.ctree_visitor_t):
+    def __init__(self, flowchart):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
-        self.eas = set()
+        self.flowchart = flowchart
+        self.matched_blocks = set()
+
+    def add_block_from_ea(self, ea):
+        if ea == idaapi.BADADDR:
+            return
+        for block in self.flowchart:
+            if block.start_ea <= ea < block.end_ea:
+                self.matched_blocks.add((block.start_ea, block.end_ea))
+                break
 
     def visit_insn(self, i):
-        if i.ea != idaapi.BADADDR: self.eas.add(i.ea)
+        if i.ea != idaapi.BADADDR:
+            self.add_block_from_ea(i.ea)
         return 0
 
     def visit_expr(self, e):
-        if e.ea != idaapi.BADADDR: self.eas.add(e.ea)
+        if e.ea != idaapi.BADADDR:
+            self.add_block_from_ea(e.ea)
         return 0
 
 class FinderCondition(ida_hexrays.ctree_visitor_t):
@@ -88,45 +99,63 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
         return idaapi.BADADDR
 
     def visit_insn(self, insn):
-        loop_insn = None
-        if insn.op == ida_hexrays.cit_for:
-            loop_insn = insn.cfor
-            print(f'--- [FOR] at {hex(insn.ea)} ---')
-        elif insn.op == ida_hexrays.cit_while:
-            loop_insn = insn.cwhile
-            print(f'--- [WHILE] at {hex(insn.ea)} ---')
-        elif insn.op == ida_hexrays.cit_do:
-            loop_insn = insn.cdo
-            print(f'--- [DO_WHILE] at {hex(insn.ea)} ---')
+            loop_expr = loop_body = None
 
-        if loop_insn:
-            if self.check_numeric_logic(loop_insn.expr):
-            # if self.equation in cond and self.condition in cond:
-                cond = self.get_expr_string(loop_insn.expr)
-                print(f'   Condition: {cond}')
+            if insn.op == ida_hexrays.cit_for:
+                loop_expr = insn.cfor.expr
+                loop_body = insn.cfor.body
+            elif insn.op == ida_hexrays.cit_while:
+                loop_expr = insn.cwhile.expr
+                loop_body = insn.cwhile.body
+            elif insn.op == ida_hexrays.cit_do:
+                loop_expr = insn.cdo.expr
+                loop_body = insn.cdo.body
 
-                start_loop_recursion = self.get_start_block(loop_insn.body)
-                end_loop_recursion = self.get_end_block(loop_insn.body)
+            if loop_expr and loop_body:
+                if self.check_numeric_logic(loop_expr):
+                    print(f"--- [DEAD LOOP] detected at {hex(insn.ea)} ---")
 
-                scanner = RangeScanner()
-                scanner.apply_to(loop_insn.body, None)
-                start_loop_ctree = min(scanner.eas)
-                end_loop_ctree = idc.get_item_end(max(scanner.eas))
+                    scanner = BlockScanner(self.flowchart)
+                    scanner.apply_to(loop_body, None)
 
-                start_loop = min(start_loop_ctree, start_loop_recursion)
-                end_loop = max(end_loop_ctree, end_loop_recursion)
-                size_obfus = end_loop - start_loop
-                possible_region = ObfuscatedRegion(start_ea = start_loop, end_ea = end_loop, obfus_size = size_obfus, comment = 'Expr Body', patch_bytes = size_obfus * b'\x90', name = 'DeadLoop', action = Action.PATCH)
+                    if not scanner.matched_blocks:
+                        return 0
 
-                start_expr = self.get_start_block(loop_insn.expr)
-                end_expr = self.get_end_block(loop_insn.expr)
-                if not (start_loop <= start_expr < end_loop):
+                    blocks = sorted(list(scanner.matched_blocks))
+                    first_start, first_end = blocks[0]
+                    size_first = first_end - first_start
+
+                    possible_region = ObfuscatedRegion(
+                        start_ea=first_start,
+                        end_ea=first_end,
+                        obfus_size=size_first,
+                        comment='DeadLoop Block',
+                        patch_bytes=size_first * b'\x90',
+                        name='DeadLoop',
+                        action=Action.PATCH
+                    )
+
+                    for i in range(1, len(blocks)):
+                        b_start, b_end = blocks[i]
+                        b_size = b_end - b_start
+                        possible_region.append_obfu(
+                            start_ea=b_start,
+                            end_ea=b_end,
+                            obfus_size=b_size,
+                            comment='DeadLoop Block',
+                            patch_bytes=b_size * b'\x90',
+                            action=Action.PATCH
+                        )
+
+                    start_expr = self.get_start_block(loop_expr)
+                    end_expr = self.get_end_block(loop_expr)
+
                     size_expr = end_expr - start_expr
                     possible_region.append_obfu(start_ea = start_expr, end_ea = end_expr, obfus_size = size_expr, comment = 'Expr Loop', patch_bytes = size_expr * b'\x90', action = Action.PATCH)
 
-                self.obfus_region.append(possible_region)
+                    self.obfus_region.append(possible_region)
 
-        return 0
+            return 0
 
 class DeadLoop(Deobfuscator):
     def __init__(self):
