@@ -7,9 +7,9 @@ import idc
 
 class Color:
     DEFCOLOR = 0xFFFFFFFF               # remove color
-    BG_PATCH_HIDDEN = 0x8BAB53          # green: hint
+    BG_PATCH_HIDDEN = 0x8BAB53          # green: patch/hidden range
     BG_OVERLAPPING = 0x4A6AFB           # red: overlap
-    BG_HINT = 0xC19F6E                  # blue: patch/hidden range
+    BG_HINT = 0x736E37                  # blue: hint
     BG_BOOKMARK = 0x3059AD              # brown: bookmark
 
 
@@ -78,25 +78,44 @@ class DeobfuscateUtils:
 
     @staticmethod
     def is_nop(addr):
+        if idaapi.get_wide_byte(addr) == 0x90:
+            return True
+
         instr = idaapi.insn_t()
-        idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_nop
+        insn_len = idaapi.decode_insn(instr, addr)
+
+        if insn_len > 0:
+            if instr.itype == idaapi.NN_nop:
+                return True
+
+        return False
+        # return instr.itype == idaapi.NN_nop
 
     @staticmethod
     def reset(start_addr, end_addr):
-        current_ea = start_addr
-        while current_ea < end_addr:
-            idaapi.del_hidden_range(current_ea)
-            idc.set_color(current_ea, idc.CIC_ITEM, 0xFFFFFFFF)
-            current_ea = idaapi.next_head(current_ea, idaapi.BADADDR)
+        next_addr = start_addr
+        while next_addr < end_addr:
+            idaapi.del_hidden_range(next_addr)
+            idc.set_color(next_addr, idc.CIC_ITEM, 0xFFFFFFFF)
+            flags = idaapi.get_flags(next_addr)
+            if idaapi.is_code(flags):
+                size_item = idaapi.get_item_size(next_addr)
+                next_addr += size_item if size_item > 0 else 1
+            else:
+                next_addr += 1
         DeobfuscateUtils.mark_as_code(start_addr, end_addr)
 
     @staticmethod
     def color_range(start_addr, end_addr, color):
-        curr = start_addr
-        while curr < end_addr:
-            idc.set_color(curr, idc.CIC_ITEM, color)
-            curr = idaapi.next_head(curr, idaapi.BADADDR)
+        next_addr = start_addr
+        while next_addr < end_addr:
+            idc.set_color(next_addr, idc.CIC_ITEM, color)
+            flags = idaapi.get_flags(next_addr)
+            if idaapi.is_code(flags):
+                size_item = idaapi.get_item_size(next_addr)
+                next_addr += size_item if size_item > 0 else 1
+            else:
+                next_addr += 1
 
     @staticmethod
     def is_all_nop(ba):

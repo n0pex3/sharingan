@@ -83,6 +83,7 @@ class Recipe(QWidget):
 
         self.setup_ui()
         self.list_recipe.setStyleSheet(ManageStyleSheet.get_stylesheet())
+        self.load_manual_bookmarks()
 
     def setup_ui(self):
         self.list_recipe = DragDropRecipe()
@@ -134,6 +135,47 @@ class Recipe(QWidget):
     def __del__(self):
         self.hint_hook.unhook()
 
+    def get_manual_node(self):
+        NODE_NAME = "$sharingan_manual_bookmarks"
+        node = idaapi.netnode(NODE_NAME)
+
+        if node.index() == idaapi.BADADDR:
+            node.create(NODE_NAME)
+        return node
+
+    def save_manual_bookmarks(self):
+        node = self.get_manual_node()
+        node.supdel_all(idaapi.stag)
+
+        node.altset(0, self.count_manual_bookmark)
+
+        for i in range(1, self.count_manual_bookmark + 1):
+            text = self.cmb_bookmark.itemText(i)
+            node.supset(i, text.encode('utf-8'))
+
+        print(f"[Sharingan] Saved {self.count_manual_bookmark} manual bookmarks.")
+
+    def load_manual_bookmarks(self):
+        """Tải dữ liệu từ netnode và đưa vào QComboBox."""
+        node = self.get_manual_node()
+        if node.index() == idaapi.BADADDR:
+            return
+
+        saved_count = node.altval(0)
+        if saved_count <= 0:
+            return
+
+        self.cmb_bookmark.blockSignals(True)
+
+        for i in range(1, saved_count + 1):
+            val = node.supstr(i)
+            if val:
+                self.cmb_bookmark.insertItem(i, val)
+
+        self.count_manual_bookmark = saved_count
+        self.cmb_bookmark.blockSignals(False)
+        print(f"[Sharingan] Restored {saved_count} manual bookmarks.")
+
     def parse_start_end_region(self, index):
         selection = self.cmb_bookmark.itemText(index)
         parts = selection.split(' - ')
@@ -141,7 +183,7 @@ class Recipe(QWidget):
             return int(parts[0], 0), int(parts[1], 0)
         return 0, 0
 
-    def reset(self):
+    def reset(self, is_preview=False):
         start_index = self.count_manual_bookmark + 1
         end_index = self.cmb_bookmark.count() - 1
         for index in range(end_index, start_index, -1):
@@ -151,7 +193,9 @@ class Recipe(QWidget):
 
         self.obfuscated_regions.clear()
         active_index = self.disassembler.currentIndex()
-        self.disassembler.clear_tab_asmview(active_index)
+        self.disassembler.clear_highlight(active_index)
+        if not is_preview:
+            self.disassembler.clear_tab_asmview(active_index)
         print('Reset all')
 
     # delete item in list recipe
@@ -187,17 +231,24 @@ class Recipe(QWidget):
         end_binary = idaapi.get_last_seg().end_ea if idaapi.get_last_seg() else idaapi.BADADDR
 
         active_index = self.disassembler.currentIndex()
-        self.disassembler.set_tab_line_edit_texts(active_index, start_binary, end_binary, True)
+        self.disassembler.set_tab_line_edit_texts(active_index, start_binary, end_binary, 0, self.count_manual_bookmark, True)
 
     # scan to find list => add to bookmark and patch
     def preview_deobfuscator(self):
         self.obfuscated_regions.clear()
         self.overlapping_regions.clear()
 
+        self.reset(True)
+
         active_tab = self.disassembler.currentIndex()
         input_start, input_end = self.disassembler.get_tab_line_edit_texts(active_tab)
-        self.start_ea = int(input_start, 16)
-        self.end_ea = int(input_end, 16)
+
+        try:
+            self.start_ea = int(input_start, 16)
+            self.end_ea = int(input_end, 16)
+        except:
+            print('Invalid address start and end')
+            return
 
         for i in range(self.list_recipe.count()):
             item = self.list_recipe.item(i)
@@ -350,7 +401,7 @@ class Recipe(QWidget):
             index = self.cmb_bookmark.currentIndex()
             selection = self.cmb_bookmark.itemText(index)
         else:
-            end_index = self.count_manual_bookmark - 1
+            end_index = self.count_manual_bookmark
             for i in range(end_index, 0, -1):
                 start_region, end_region = self.parse_start_end_region(i)
                 if start_region <= exclude_addr <= end_region:
@@ -369,6 +420,7 @@ class Recipe(QWidget):
 
         if 0 < index <= self.count_manual_bookmark:
             self.count_manual_bookmark -= 1
+            self.save_manual_bookmarks()
         else:
             # Iterate backwards to safely pop from list
             for i in range(len(self.obfuscated_regions) - 1, -1, -1):
@@ -416,6 +468,7 @@ class Recipe(QWidget):
             self.count_manual_bookmark += 1
             self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
             DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_BOOKMARK)
+            self.save_manual_bookmarks()
 
     def disassemble_range_addr(self, index):
         start_region, end_region = self.parse_start_end_region(self.cmb_bookmark.currentIndex())
@@ -428,46 +481,90 @@ class Recipe(QWidget):
         self.disassembler.set_tab_line_edit_texts(active_index, start_region, end_region, index, self.count_manual_bookmark)
 
     # Flatten all sub-regions with their locations
+    # def check_overlapping_regions(self):
+    #     intervals = []
+    #     for i, list_regions in enumerate(self.obfuscated_regions):
+    #         for j, r in enumerate(list_regions):
+    #             for k, region_part in enumerate(r.regions):
+    #                 intervals.append((region_part.start_ea, region_part.end_ea, i, j, k, r.name))
+
+    #     if not intervals:
+    #         return False
+
+    #     # Sort by start, then by end
+    #     intervals.sort(key=lambda x: (x[0], x[1]))
+
+    #     # Collect regions to alert
+    #     self.overlapping_regions.clear()
+    #     curr_end = intervals[0][1]
+    #     for index in range(1, len(intervals)):
+    #         start, end, i, j, k, current_name = intervals[index]
+    #         # after sort, if end_region larger than previous start region => overlap
+    #         if start < curr_end:
+    #             previous_name = intervals[index - 1][5]
+    #             self.overlapping_regions.add((i, j, k, current_name, previous_name))
+    #         else:
+    #             curr_end = end
+
+    #     if self.overlapping_regions:
+    #         for region in self.overlapping_regions:
+    #             i, j, k, current_name, previous_name = region
+    #             start_overlapping = self.obfuscated_regions[i][j].regions[k].start_ea
+    #             end_overlapping = self.obfuscated_regions[i][j].regions[k].end_ea
+    #             print(f"Overlap: {hex(start_overlapping)} - {hex(end_overlapping)} - {current_name} - {previous_name}")
+    #         return True
+    #     return False
+
     def check_overlapping_regions(self):
         intervals = []
         for i, list_regions in enumerate(self.obfuscated_regions):
             for j, r in enumerate(list_regions):
                 for k, region_part in enumerate(r.regions):
-                    intervals.append((region_part.start_ea, region_part.end_ea, i, j, k, r.name))
+                    intervals.append({
+                        'start': region_part.start_ea,
+                        'end': region_part.end_ea,
+                        'name': r.name,
+                        'id': (i, j, k)
+                    })
 
         if not intervals:
             return False
 
-        # Sort by start, then by end
-        intervals.sort(key=lambda x: (x[0], x[1]))
+        # Sắp xếp theo địa chỉ bắt đầu
+        intervals.sort(key=lambda x: (x['start'], x['end']))
 
-        # Collect regions to alert
-        self.overlapping_regions.clear()
-        curr_end = intervals[0][1]
-        for index in range(1, len(intervals)):
-            start, end, i, j, k, current_name = intervals[index]
-            # after sort, if end_region larger than previous start region => overlap
-            if start < curr_end:
-                previous_name = intervals[index - 1][5]
-                self.overlapping_regions.add((i, j, k, current_name, previous_name))
-            else:
-                curr_end = end
+        self.overlapping_regions.clear() # Lưu trữ các tuple (start, end) của vùng giao nhau thực sự
+        has_overlap = False
 
-        if self.overlapping_regions:
-            for region in self.overlapping_regions:
-                i, j, k, current_name, previous_name = region
-                start_overlapping = self.obfuscated_regions[i][j].regions[k].start_ea
-                end_overlapping = self.obfuscated_regions[i][j].regions[k].end_ea
-                print(f"Overlap: {hex(start_overlapping)} - {hex(end_overlapping)} - {current_name} - {previous_name}")
-            return True
-        return False
+        for i in range(len(intervals)):
+            for j in range(i + 1, len(intervals)):
+                # Vì đã sort, nếu region j bắt đầu sau khi region i kết thúc thì không thể overlap nữa
+                if intervals[j]['start'] >= intervals[i]['end']:
+                    break
+
+                # Tính toán vùng giao nhau thực sự (Intersection)
+                # Do đã sort nên start_j luôn >= start_i
+                inter_start = intervals[j]['start']
+                inter_end = min(intervals[i]['end'], intervals[j]['end'])
+
+                if inter_start < inter_end:
+                    self.overlapping_regions.add((inter_start, inter_end))
+                    print(f"Overlap detected: {hex(inter_start)} - {hex(inter_end)} "
+                            f"between '{intervals[i]['name']}' and '{intervals[j]['name']}'")
+                    has_overlap = True
+
+        return has_overlap
+
+    def highlight_overlapping(self):
+        for start_ea, end_ea in self.overlapping_regions:
+            DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_OVERLAPPING)
 
     # highlight background overlapping region by red
-    def highlight_overlapping(self):
-        for region in self.overlapping_regions:
-            i, j, k, _, _ = region
-            item = self.obfuscated_regions[i][j].regions[k]
-            DeobfuscateUtils.color_range(item.start_ea, item.end_ea, Color.BG_OVERLAPPING)
+    # def highlight_overlapping(self):
+    #     for region in self.overlapping_regions:
+    #         i, j, k, _, _ = region
+    #         item = self.obfuscated_regions[i][j].regions[k]
+    #         DeobfuscateUtils.color_range(item.start_ea, item.end_ea, Color.BG_OVERLAPPING)
 
     #highlight background obfuscated region by green
     def highlight_hint(self):
@@ -505,6 +602,7 @@ class Recipe(QWidget):
                         patch_bytes = bytes(reg.patch_bytes)
                         DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
                         DeobfuscateUtils.patch_bytes(start_ea, patch_bytes)
+                        DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
                         DeobfuscateUtils.mark_as_code(start_ea, end_ea)
 
                         # color region
@@ -516,10 +614,11 @@ class Recipe(QWidget):
                         else:
                             nop_ea = start_ea
                             while nop_ea < end_ea:
+                                print(hex(nop_ea))
                                 if DeobfuscateUtils.is_nop(nop_ea):
                                     break
                                 idc.set_color(nop_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
-                                nop_ea = idaapi.next_head(nop_ea, idaapi.BADADDR)
+                                nop_ea = idaapi.get_item_end(nop_ea)
 
                             DeobfuscateUtils.mark_as_code(start_ea, end_ea)
                             idaapi.del_item_color(nop_ea)

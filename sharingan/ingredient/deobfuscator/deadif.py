@@ -6,12 +6,35 @@ from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePo
 
 
 class FinderCondition(ida_hexrays.ctree_visitor_t):
-    def __init__(self, func, obfus_region, equation, condition):
+    def __init__(self, func, obfus_region, equation, user_val):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
         self.flowchart = idaapi.FlowChart(func)
         self.obfus_region = obfus_region
         self.equation = equation
-        self.condition = condition
+        self.user_val = int(user_val, 0)
+
+        self.op_map = {
+            '==': [22],                     # cot_eq
+            '>':  [28, 29],                 # cot_sgt, cot_ugt
+            '>=': [24, 25],                 # cot_sge, cot_uge
+            '<':  [30, 31],                 # cot_slt, cot_ult
+            '<=': [26, 27]                  # cot_sle, cot_ule
+        }
+        self.COT_NUM = 61  # cot_num
+
+    def check_numeric_logic(self, expr):
+        target_ops = self.op_map.get(self.equation, [])
+        if expr.op not in target_ops:
+            return False
+        if expr.y.op == self.COT_NUM:
+            code_val = expr.y.n._value
+            if self.equation in ['>', '>=']:
+                return code_val >= self.user_val
+            elif self.equation in ['<', '<=']:
+                return code_val <= self.user_val
+            elif self.equation == '==':
+                return code_val == self.user_val
+        return False
 
     def get_boundary_block(self, ea):
         for block in self.flowchart:
@@ -108,9 +131,10 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
 
     def visit_insn(self, insn):
         if insn.op == ida_hexrays.cit_if:
-            cond = self.get_expr_string(insn.cif.expr)
-            if self.condition in cond and self.equation in cond:
+            if self.check_numeric_logic(insn.cif.expr):
+            # if self.condition in cond and self.equation in cond:
                 print(f'--- [IF] at {hex(insn.ea)} ---')
+                cond = self.get_expr_string(insn.cif.expr)
                 print(f'   Condition: {cond}')
 
                 jmp_ea = insn.ea
@@ -162,14 +186,11 @@ class DeadIf(Deobfuscator):
     def setup_ui(self):
         super().setup_ui()
 
-        self.lbl_label = QLabel('Condition')
-        self.lbl_label.setObjectName('header_ingredient_recipe')
         self.cmb_equation = QComboBox()
         self.cmb_equation.addItems(['>=', '>', '<', '<=', '=='])
         self.cmb_equation.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ldt_condition = QLineEdit()
         self.layout_input = QHBoxLayout()
-        self.layout_input.addWidget(self.lbl_label)
         self.layout_input.addWidget(self.cmb_equation)
         self.layout_input.addWidget(self.ldt_condition)
         self.layout_body.addLayout(self.layout_input)

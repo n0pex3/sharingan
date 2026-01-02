@@ -46,24 +46,26 @@ class JmpClean(Deobfuscator):
                     is_valid_jmp = True
                     start_binary = idaapi.get_imagebase()
                     end_binary = idaapi.get_last_seg().end_ea if idaapi.get_last_seg() else idaapi.BADADDR
+                    DeobfuscateUtils.del_items(found_addr, len_obfu_jump)
+                    DeobfuscateUtils.mark_as_code(found_addr, found_addr + len_obfu_jump)
                     # check valid dest jump
                     while current_addr < found_addr + len_obfu_jump:
                         if not (start_binary < idc.get_operand_value(current_addr, 0) < end_binary):
                             print(f"Invalid jmp {current_addr}")
                             is_valid_jmp = False
                             continue
-                        comment += f"{idaapi.tag_remove(idaapi.generate_disasm_line(current_addr, 0))}\n"
+                        comment += f"{idaapi.generate_disasm_line(current_addr, 0)}\n"
                         current_addr += len_obfu_jump // 2
 
                     if is_valid_jmp:
                         # create valid instruction, convert invalid opcode to data
-                        dest_jmp = idc.get_operand_value(found_addr, 0)
-                        addr_obfus_jmp = idaapi.get_item_head(dest_jmp)
-                        size_insn_obfus_jmp = idaapi.get_item_size(addr_obfus_jmp)
-                        DeobfuscateUtils.del_items(addr_obfus_jmp, size_insn_obfus_jmp, True)
-                        next_addr_obfus_jmp = idaapi.next_head(dest_jmp, idaapi.BADADDR)
-                        DeobfuscateUtils.mark_as_code(dest_jmp, next_addr_obfus_jmp)
-                        size_invalid_opcode = dest_jmp - addr_obfus_jmp
+                        # dest_jmp = idc.get_operand_value(found_addr, 0)
+                        # addr_obfus_jmp = idaapi.get_item_head(dest_jmp)
+                        # size_insn_obfus_jmp = idaapi.get_item_size(addr_obfus_jmp)
+                        # DeobfuscateUtils.del_items(addr_obfus_jmp, size_insn_obfus_jmp, True)
+                        # next_addr_obfus_jmp = idaapi.next_head(dest_jmp, idaapi.BADADDR)
+                        # DeobfuscateUtils.mark_as_code(dest_jmp, next_addr_obfus_jmp)
+                        # size_invalid_opcode = dest_jmp - addr_obfus_jmp
 
                         if len_obfu_jump == 4:
                             mod_bytes = bytearray(ida_bytes.get_bytes(found_addr, len_obfu_jump))
@@ -80,8 +82,8 @@ class JmpClean(Deobfuscator):
                         possible_region = ObfuscatedRegion(start_ea = found_addr, end_ea = found_addr + len_obfu_jump, obfus_size = len_obfu_jump, comment = comment,
                                                             patch_bytes = mod_bytes, name = 'jumpclean', action = Action.PATCH)
                         # region invalid opcode
-                        possible_region.append_obfu(start_ea = addr_obfus_jmp, end_ea = dest_jmp, obfus_size = size_invalid_opcode, comment = 'NOP',
-                                                    patch_bytes = size_invalid_opcode * b'\x90', action = Action.PATCH)
+                        # possible_region.append_obfu(start_ea = addr_obfus_jmp, end_ea = dest_jmp, obfus_size = size_invalid_opcode, comment = 'NOP',
+                                                    # patch_bytes = size_invalid_opcode * b'\x90', action = Action.PATCH)
                         self.possible_obfuscation_regions.append(possible_region)
 
                     key_index = 0

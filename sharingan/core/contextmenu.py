@@ -28,6 +28,7 @@ class HandlerBookmark(idaapi.action_handler_t):
         super().__init__()
         self.start_ea = 0
         self.end_ea = 0
+        self.recipe = None
 
     def register_recipe(self, recipe):
         self.recipe = recipe
@@ -39,9 +40,13 @@ class HandlerBookmark(idaapi.action_handler_t):
                 self.start_ea = start_ea
                 self.end_ea = end_ea
             else:
-                self.start_ea = self.end_ea = idaapi.get_screen_ea()
+                self.start_ea = idaapi.get_screen_ea()
+                self.end_ea = idaapi.get_item_end(self.start_ea)
 
             hint = ida_kernwin.ask_str('', 0, 'Hint')
+            if not hint:
+                print('Please input hint')
+                return
             if re.fullmatch(r'[a-zA-Z0-9\s]+', hint):
                 self.recipe.append_bookmark(self.start_ea, self.end_ea, hint)
             else:
@@ -56,6 +61,7 @@ class HandlerBookmark(idaapi.action_handler_t):
 class HandlerExclusion(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
+        self.recipe = None
 
     def register_recipe(self, recipe):
         self.recipe = recipe
@@ -74,6 +80,7 @@ class HandlerExclusion(idaapi.action_handler_t):
 class HandlerFilter(idaapi.action_handler_t):
     def __init__(self):
         super().__init__()
+        self.recipe = None
 
     def register_recipe(self, recipe):
         self.recipe = recipe
@@ -85,7 +92,8 @@ class HandlerFilter(idaapi.action_handler_t):
                 self.start_ea = start_ea
                 self.end_ea = end_ea
             else:
-                self.start_ea = self.end_ea = idaapi.get_screen_ea()
+                self.start_ea = idaapi.get_screen_ea()
+                self.end_ea = idaapi.get_item_end(self.start_ea)
             self.recipe.add_ingredient_substitute(self.start_ea, self.end_ea)
         else:
             print('Please run plugin first')
@@ -113,6 +121,10 @@ class InitHookMenu():
         idaapi.unregister_action(BOOKMARK_LIST)
         idaapi.unregister_action(REVERT)
         idaapi.unregister_action(FILTER)
+
+        self.handler_bookmark.recipe = None
+        self.handler_exclusion.recipe = None
+        self.handler_filter.recipe = None
 
     def register_recipe(self, recipe):
         self.handler_bookmark.register_recipe(recipe)

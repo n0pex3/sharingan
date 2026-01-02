@@ -22,6 +22,7 @@ class Substitute(Deobfuscator):
         self.layout_addr.addWidget(self.ldt_start_ea)
         self.layout_addr.addWidget(self.ldt_end_ea)
         self.tet_patching_instruction = QTextEdit()
+        self.tet_patching_instruction.setMaximumHeight(100)
         self.layout_body.addLayout(self.layout_addr)
         self.layout_body.addWidget(self.tet_patching_instruction)
 
