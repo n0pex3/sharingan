@@ -1,6 +1,7 @@
 from sharingan.base.ingredient import Deobfuscator
 from sharingan.core.utils import DeobfuscateUtils
 from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
+from PySide6.QtWidgets import QLineEdit
 
 import idaapi, idc
 
@@ -44,6 +45,13 @@ class Propagate(Deobfuscator):
 
         self.mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, self.hook_mem_invalid)
 
+    def setup_ui(self):
+        super().setup_ui()
+
+        self.ldt_depth = QLineEdit()
+        self.ldt_depth.setPlaceholderText('Depth')
+        self.layout_body.addWidget(self.ldt_depth)
+
     # when access invalid memory like unmap region => log and continue
     def hook_mem_invalid(self, uc, access, address, size, value, user_data):
         rip = uc.reg_read(UC_X86_REG_RIP)
@@ -63,20 +71,31 @@ class Propagate(Deobfuscator):
             return False
 
     # extract bytes to emulate
-    def prepare_emulation(self, addr_obfus):
+    def prepare_emulation(self, addr_obfus, depth=None):
         start_emu = addr_obfus
-        while True:
-            # loop previous insn to extract bytes
-            start_emu = idaapi.prev_head(start_emu, self.imagebase)
-            if start_emu < self.start_ea:
-                start_emu = self.start_ea
-                break
-            elif start_emu == idaapi.BADADDR:
-                start_emu = self.imagebase
-                break
-            elif DeobfuscateUtils.is_jmp(start_emu) or DeobfuscateUtils.is_call(start_emu):
-                start_emu = idaapi.next_head(start_emu, idaapi.BADADDR)
-                break
+        if depth is None:
+            while True:
+                # loop previous insn to extract bytes
+                start_emu = idaapi.prev_head(start_emu, self.imagebase)
+                if start_emu < self.start_ea:
+                    start_emu = self.start_ea
+                    break
+                elif start_emu == idaapi.BADADDR or start_emu < self.imagebase:
+                    start_emu = self.imagebase
+                    break
+                elif DeobfuscateUtils.is_jmp(start_emu) or DeobfuscateUtils.is_call(start_emu):
+                    start_emu = idaapi.next_head(start_emu, idaapi.BADADDR)
+                    break
+        else:
+            print('Depth', depth)
+            for _ in range(depth):
+                start_emu = idaapi.prev_head(start_emu, self.imagebase)
+                if start_emu < self.start_ea:
+                    start_emu = self.start_ea
+                    break
+                elif start_emu == idaapi.BADADDR or start_emu < self.imagebase:
+                    start_emu = self.imagebase
+                    break
 
         len_bytes = addr_obfus - start_emu
         if len_bytes:
@@ -133,13 +152,16 @@ class Propagate(Deobfuscator):
         if self.text_segm.start_ea <= rax < self.text_segm.end_ea:
             return rax
         else:
-            print(f"Invalid jmp {hex(addr_obfus)}")
+            print(f"Invalid jmp {hex(addr_obfus)} {hex(rax)}")
             return 0
 
     def scan(self, start_addr, end_addr):
         self.start_ea = start_addr
         self.end_ea = end_addr
         self.possible_obfuscation_regions.clear()
+        depth = 0
+        if self.ldt_depth.text():
+            depth = int(self.ldt_depth.text(), 0)
 
         next_addr = start_addr
         while next_addr < end_addr:
@@ -156,7 +178,19 @@ class Propagate(Deobfuscator):
                 if op_reg.type != idaapi.o_reg or op_reg.reg != 0:
                     continue
                 bytes_emulation, start_emu = self.prepare_emulation(next_addr)
-                addr_deob = self.emulate_code(bytes_emulation, start_emu, next_addr)
+                addr_deob = 0
+                if bytes_emulation:
+                    addr_deob = self.emulate_code(bytes_emulation, start_emu, next_addr)
+                if addr_deob == 0 and depth != 0:
+                    for d in range(1, 200):
+                        bytes_emulation, start_emu = self.prepare_emulation(next_addr, depth=d)
+                        if not bytes_emulation:
+                            print('Cannot extract bytecode')
+                            break
+                        addr_deob = self.emulate_code(bytes_emulation, start_emu, next_addr)
+                        if addr_deob != 0:
+                            break
+
                 if addr_deob:
                     possible_region = ObfuscatedRegion(start_ea = next_addr, end_ea = idaapi.next_head(next_addr, idaapi.BADADDR), comment = hex(addr_deob), name = 'propagate', action = Action.CMT)
                     self.possible_obfuscation_regions.append(possible_region)

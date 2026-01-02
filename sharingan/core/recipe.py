@@ -541,6 +541,15 @@ class Recipe(QWidget):
             for r in list_regions:
                 for reg in r.regions:
                     if reg.action == Action.CMT:
+                        start_ea = reg.start_ea
+                        end_ea = reg.end_ea
+                        start_index_bookmark = self.count_manual_bookmark + 2
+                        end_index_bookmark = self.cmb_bookmark.count()
+                        # remove bookmark
+                        index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
+                        if index_bookmark:
+                            self.cmb_bookmark.removeItem(index_bookmark)
+
                         idaapi.set_cmt(reg.start_ea, reg.comment, 0)
                     elif reg.action == Action.PATCH:
                         start_ea = reg.start_ea
