@@ -51,11 +51,15 @@ class DBHook(idaapi.IDB_Hooks):
                             idx_line.add(y)
 
         if ea in self.asm_view.addr_asm_highlight:
-            self.asm_view.addr_asm_highlight.remove(ea)
+            self.asm_view.addr_asm_highlight.discard(ea)
             self.asm_view.addr_pseudo_highlight ^= idx_line
+            self.asm_view.addr_asm_overlap.discard(ea)
         elif color != Color.BG_BOOKMARK and color != Color.DEFCOLOR:
-            self.asm_view.addr_asm_highlight.add(ea)
-            self.asm_view.addr_pseudo_highlight |= idx_line
+            if color == Color.BG_HINT:
+                self.asm_view.addr_asm_highlight.add(ea)
+                self.asm_view.addr_pseudo_highlight |= idx_line
+            elif color == Color.BG_OVERLAPPING:
+                self.asm_view.addr_asm_overlap.add(ea)
 
 
 # color asm line
@@ -65,9 +69,11 @@ class ASMLine:
         self.address = ea
         self.padding = " " * 2
 
-        flags = idaapi.get_flags(ea)
+        # flags = idaapi.get_flags(ea)
+        flags = ida_bytes.get_full_flags(ea)
 
-        if idaapi.is_head(flags):
+        # if idaapi.is_head(flags):
+        if ida_bytes.is_code(flags):
             self.colored_instruction = idaapi.generate_disasm_line(ea, 0)
             if not self.colored_instruction:
                 self.colored_instruction = idaapi.COLSTR("??", idaapi.SCOLOR_ERROR)
@@ -175,6 +181,7 @@ class ASMView(idaapi.simplecustviewer_t):
         self.lines_pseudocode_before_raw = []
         self.lines_asm_before = []
         self.addr_asm_highlight = set()
+        self.addr_asm_overlap = set()
         self.addr_pseudo_highlight = set()
 
         self.cfunc = None
@@ -214,33 +221,53 @@ class ASMView(idaapi.simplecustviewer_t):
         self.start_ea = start_ea
         self.end_ea = end_ea
         self.lines_asm_before.clear()
-        self.ClearLines()
+        self.clear_lines()
 
+        last_item_type = None
         next_addr = start_ea
+        last_was_nop = False
+
         while next_addr < end_ea:
+            flags = idaapi.get_full_flags(next_addr)
+            is_code = idaapi.is_code(flags)
+            current_type = "code" if is_code else "junk"
+
+            current_is_nop = False
+            if is_code:
+                current_is_nop = DeobfuscateUtils.is_nop(next_addr)
+
+            if is_code and current_is_nop and last_was_nop:
+                size_item = idaapi.get_item_size(next_addr)
+                next_addr += size_item if size_item > 0 else 1
+                continue
+
+            if last_item_type is not None and last_item_type != current_type:
+                separator = idaapi.COLSTR(f" {next_addr:08X} " + ";" + "-" * 30, idaapi.SCOLOR_AUTOCMT)
+                self.AddLine(separator)
+
             line = ASMLine(next_addr)
+
+            if is_code and current_is_nop:
+                line.colored_instruction = idaapi.COLSTR("NOP NOP NOP ...", idaapi.SCOLOR_INSN)
+
             if line.label:
                 self.AddLine(line.colored_blank)
                 self.AddLine(line.colored_label)
-                # backup to diff
-                self.lines_asm_before.append(
-                    {"addr": next_addr, "content": line.colored_blank}
-                )
-                self.lines_asm_before.append(
-                    {"addr": next_addr, "content": line.colored_label}
-                )
+                self.lines_asm_before.append({"addr": next_addr, "content": line.colored_blank})
+                self.lines_asm_before.append({"addr": next_addr, "content": line.colored_label})
             self.AddLine(line.colored_asmline)
-            self.lines_asm_before.append(
-                {"addr": next_addr, "content": line.colored_asmline}
-            )
+            self.lines_asm_before.append({"addr": next_addr, "content": line.colored_asmline})
             # add data if found
-            flags = idaapi.get_flags(next_addr)
-            if idaapi.is_head(flags):
+            if current_type == 'code':
                 size_item = idaapi.get_item_size(next_addr)
                 next_addr += size_item if size_item > 0 else 1
+                last_was_nop = current_is_nop
             else:
                 next_addr += 1
+                last_was_nop = False
+            last_item_type = current_type
         self.Refresh()
+
 
     def decompile(self, start_ea, end_ea):
         self.start_ea = start_ea
@@ -261,7 +288,7 @@ class ASMView(idaapi.simplecustviewer_t):
             print("Failed to decompile!")
             return
         pseudocode = self.cfunc.get_pseudocode()
-        self.ClearLines()
+        self.clear_lines()
         for sline in pseudocode:
             self.AddLine(sline.line)
             # backup to diff
@@ -273,7 +300,7 @@ class ASMView(idaapi.simplecustviewer_t):
         self.filter.set_signal_filter(signal_filter)
 
     def popup_option_filter(self, widget, popup, ctx):
-        if self.mode == "disassembler":
+        if self.mode == "disassembler" and ida_kernwin.get_widget_title(widget) == 'asm_view':
             idaapi.attach_action_to_popup(widget, popup, FILTER_ACTION_NAME, None, 0)
 
     def highlight_diff_lines(self, out, widget, info):
@@ -298,6 +325,8 @@ class ASMView(idaapi.simplecustviewer_t):
                     address = int(raw_line.split()[0], 16)
                     if address in self.addr_asm_highlight and self.idx_bookmark <= self.count_manual_bookmark:
                         color = idaapi.CK_EXTRA6
+                    elif address in self.addr_asm_overlap and self.idx_bookmark <= self.count_manual_bookmark:
+                        color = idaapi.CK_EXTRA4
                     else:
                         continue
             elif self.mode == 'decompiler':
@@ -355,7 +384,7 @@ class ASMView(idaapi.simplecustviewer_t):
             lines_pseudocode_after_raw.append(idaapi.tag_remove(sline.line))
 
         self.pseudocode = lines_pseudocode_after_raw
-        self.ClearLines()
+        self.clear_lines()
 
         # split parts
         _, body_before, _, body_before_raw = self.split_header_body(
@@ -400,7 +429,7 @@ class ASMView(idaapi.simplecustviewer_t):
                     intervals.append((region_part.start_ea, region_part.end_ea))
         intervals.sort(key=lambda x: (x[0], x[1]))
 
-        self.ClearLines()
+        self.clear_lines()
         is_diff = False
         idx = 0
         last_was_nop = False
@@ -430,6 +459,8 @@ class ASMView(idaapi.simplecustviewer_t):
                     current_is_nop = DeobfuscateUtils.is_nop(current_ea)
                     if not (current_is_nop and last_was_nop):
                         line = ASMLine(current_ea)
+                        if current_is_nop:
+                            line.colored_instruction = idaapi.COLSTR("NOP NOP NOP ...", idaapi.SCOLOR_INSN)
                         self.AddLine(f"+ {line.colored_asmline}")
 
                     last_was_nop = current_is_nop
@@ -470,6 +501,11 @@ class ASMView(idaapi.simplecustviewer_t):
         elif self.mode == "disassembler":
             self.diff_disassembler(obfuscated_regions)
 
+    def clear_lines(self):
+        self.ClearLines()
+        self.Refresh()
+        self.Jump(0, 0)
+
 
 # class handle each tab disassembler
 class DisassembleTab(QWidget):
@@ -483,9 +519,10 @@ class DisassembleTab(QWidget):
             main_tab = main_tab.parent()
         self.main_tab = main_tab
 
-        self.cached_start_ea = None
-        self.cached_end_ea = None
+        self.cached_start_ea = 0
+        self.cached_end_ea = 0
         self.mutex = threading.Lock()
+        self.cached_mode = None
         self.mode = "disassembler"
         self.decryption_runner = None
         try:
@@ -572,15 +609,10 @@ class DisassembleTab(QWidget):
             self.ldt_end_ea.setEnabled(True)
             self.asm_view.idx_bookmark = 0
             self.asm_view.count_manual_bookmark = 0
-            start_region = self.asm_view.start_ea
-            end_region = self.asm_view.end_ea
-            if mode.lower() == "disassembler":
-                self.asm_view.disassemble(start_region, end_region)
-            elif mode.lower() == "decompiler":
-                self.asm_view.decompile(start_region, end_region)
 
-        self.mode = mode.lower()
-        self.asm_view.mode = self.mode
+            self.mode = mode.lower()
+            self.asm_view.mode = self.mode
+            self.switch_mode_display()
 
     def get_line_edit_texts(self):
         return self.ldt_start_ea.text(), self.ldt_end_ea.text()
@@ -637,12 +669,13 @@ class DisassembleTab(QWidget):
                     print("End EA must be greater than Start EA")
                     return
 
-                if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea:
-                    print("Same previous range")
+                if self.cached_start_ea == start_ea and self.cached_end_ea == end_ea and self.cached_mode == self.mode:
+                    print("Same current range")
                     return
 
                 self.cached_start_ea = start_ea
                 self.cached_end_ea = end_ea
+                self.cached_mode = self.mode
 
             except ValueError:
                 print("Error parsing address")
@@ -663,11 +696,16 @@ class DisassembleTab(QWidget):
         self.decryption_runner = runner
 
     def clear_asmview(self):
-        self.asm_view.ClearLines()
+        self.asm_view.clear_lines()
 
     def clear_input_address(self):
         self.ldt_start_ea.clear()
         self.ldt_end_ea.clear()
+
+    def clear_cache_address(self):
+        self.cached_start_ea = 0
+        self.cached_end_ea = 0
+        self.cached_mode = None
 
     def refresh_asmview(self):
         start_ea = self.asm_view.start_ea
@@ -685,6 +723,7 @@ class Disassembler(QTabWidget):
     ):
         super().__init__()
         self.setTabsClosable(True)
+        self.setUsesScrollButtons(True)
         self.setMovable(True)
         self.setObjectName("disassembler")
         self.tabCloseRequested.connect(self.close_tab)
@@ -761,6 +800,7 @@ class Disassembler(QTabWidget):
     def clear_tab_asmview(self, index):
         self.tab_contents[index].clear_asmview()
         self.tab_contents[index].clear_input_address()
+        self.tab_contents[index].clear_cache_address()
 
     def set_tab_line_edit_texts(self, index, start_ea, end_ea, idx_bookmark, count_manual_bookmark, is_all_binary=False):
         self.tab_contents[index].set_line_edit_texts(start_ea, end_ea, idx_bookmark, count_manual_bookmark, is_all_binary)
@@ -772,3 +812,8 @@ class Disassembler(QTabWidget):
     # only refresh, no display diff
     def refresh_tab_asmview(self, index):
         self.tab_contents[index].refresh_asmview()
+
+    def clear_highlight(self, index):
+        self.tab_contents[index].asm_view.addr_asm_highlight.clear()
+        self.tab_contents[index].asm_view.addr_pseudo_highlight.clear()
+        self.tab_contents[index].asm_view.addr_asm_overlap.clear()

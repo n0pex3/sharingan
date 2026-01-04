@@ -6,12 +6,41 @@ from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePo
 
 
 class FinderCondition(ida_hexrays.ctree_visitor_t):
-    def __init__(self, func, obfus_region, equation, condition):
+    def __init__(self, func, obfus_region, equation, user_val):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
         self.flowchart = idaapi.FlowChart(func)
         self.obfus_region = obfus_region
         self.equation = equation
-        self.condition = condition
+        self.user_val = int(user_val, 0)
+
+        self.op_map = {
+            '==': [22],                     # cot_eq
+            '>':  [28, 29],                 # cot_sgt, cot_ugt
+            '>=': [24, 25],                 # cot_sge, cot_uge
+            '<':  [30, 31],                 # cot_slt, cot_ult
+            '<=': [26, 27]                  # cot_sle, cot_ule
+        }
+        self.COT_NUM = 61  # cot_num
+
+    def check_numeric_logic(self, expr):
+        if not expr:
+            return False
+
+        if expr.op in [ida_hexrays.cot_land, ida_hexrays.cot_lor]:
+            return self.check_numeric_logic(expr.x) or self.check_numeric_logic(expr.y)
+
+        target_ops = self.op_map.get(self.equation, [])
+        if expr.op not in target_ops:
+            return False
+        if expr.y.op == self.COT_NUM:
+            code_val = expr.y.n._value
+            if self.equation in ['>', '>=']:
+                return self.user_val >= code_val
+            elif self.equation in ['<', '<=']:
+                return self.user_val <= code_val
+            elif self.equation == '==':
+                return self.user_val == code_val
+        return False
 
     def get_boundary_block(self, ea):
         for block in self.flowchart:
@@ -106,50 +135,126 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
             jmp_ea = idaapi.next_head(jmp_ea, idaapi.BADADDR)
         return jmp_ea
 
+    # def visit_insn(self, insn):
+    #     if insn.op == ida_hexrays.cit_if:
+    #         if self.check_numeric_logic(insn.cif.expr):
+    #         # if self.condition in cond and self.equation in cond:
+    #             print(f'--- [IF] at {hex(insn.ea)} ---')
+    #             cond = self.get_expr_string(insn.cif.expr)
+    #             print(f'   Condition: {cond}')
+
+    #             jmp_ea = insn.ea
+    #             jmp_ea = self.find_jmp(jmp_ea)
+    #             start_then = end_then = start_else = end_else = idaapi.BADADDR
+    #             if not insn.cif.ielse and not self.is_break_statement(insn.cif.ithen):
+    #                 start_then = idaapi.next_head(jmp_ea, idaapi.BADADDR)
+    #                 end_then = self.get_end_block(insn.cif.ithen)
+    #             else:
+    #                 if not self.is_break_statement(insn.cif.ithen):
+    #                     start_then = self.get_start_block(insn.cif.ithen)
+    #                     end_then = self.get_end_block(insn.cif.ithen)
+    #                 if not self.is_break_statement(insn.cif.ielse):
+    #                     start_else = self.get_start_block(insn.cif.ielse)
+    #                     end_else = self.get_end_block(insn.cif.ielse)
+    #             print(f"Then: start_blk {hex(start_then)} end_blk {hex(end_then)}")
+    #             if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
+    #                 print(f"Else start_else {hex(start_else)} end_else {hex(end_else)}")
+
+    #             if start_then != idaapi.BADADDR and end_then != idaapi.BADADDR:
+    #                 size_obfus = end_then - start_then
+    #                 possible_region = ObfuscatedRegion(start_ea = start_then, end_ea = end_then, obfus_size = size_obfus, comment = 'DeadIf Then', patch_bytes = size_obfus * b'\x90', name = 'DeadIf', action = Action.PATCH)
+    #                 if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
+    #                     size_obfus = end_else - start_else
+    #                     possible_region.append_obfu(start_ea = start_else, end_ea = end_else, obfus_size = size_obfus, comment = 'DeadIf Else', patch_bytes = size_obfus * b'\x90', action = Action.PATCH)
+
+    #                 sub_conditions = []
+    #                 self.find_and_or_condition(insn.cif.expr, sub_conditions)
+    #                 for idx, item in enumerate(sub_conditions):
+    #                     print(f'      CMP: {hex(item["cmp"])} | JMP: {hex(item["jmp"])}')
+    #                     if not(start_then <= item["cmp"] < end_then) or not (start_else <= item["cmp"] < end_else):
+    #                         size_cmp = idaapi.get_item_size(item["cmp"])
+    #                         possible_region.append_obfu(start_ea = item["cmp"], end_ea = idaapi.next_head(item["cmp"], idaapi.BADADDR), obfus_size = size_cmp, comment = 'DeadIf CMP', patch_bytes = size_cmp * b'\x90', action = Action.PATCH)
+    #                     if not (start_then <= item["jmp"] < end_then) or not (start_else <= item["jmp"] < end_else):
+    #                         size_jmp = idaapi.get_item_size(item["jmp"])
+    #                         possible_region.append_obfu(start_ea = item["jmp"], end_ea = idaapi.next_head(item["jmp"], idaapi.BADADDR), obfus_size = size_jmp, comment = 'DeadIf JMP', patch_bytes = size_jmp * b'\x90', action = Action.PATCH)
+
+    #                 self.obfus_region.append(possible_region)
+
+    #     return 0
+    #
     def visit_insn(self, insn):
         if insn.op == ida_hexrays.cit_if:
-            cond = self.get_expr_string(insn.cif.expr)
-            if self.condition in cond and self.equation in cond:
+            # check condition expression if is junk code or not base on input of user
+            if self.check_numeric_logic(insn.cif.expr):
                 print(f'--- [IF] at {hex(insn.ea)} ---')
+                cond = self.get_expr_string(insn.cif.expr)
                 print(f'   Condition: {cond}')
 
-                jmp_ea = insn.ea
-                jmp_ea = self.find_jmp(jmp_ea)
+                # 1. find pair cmp/jmp instruction and/or
+                sub_conditions = []
+                self.find_and_or_condition(insn.cif.expr, sub_conditions)
+
+                if not sub_conditions:
+                    return 0
+
+                # 2. always init possible_region from first pair cmp/jmp to prevent missing if break in loop
+                first_item = sub_conditions[0]
+                size_cmp = idaapi.get_item_size(first_item["cmp"])
+
+                possible_region = ObfuscatedRegion(
+                    start_ea=first_item["cmp"],
+                    end_ea=idaapi.next_head(first_item["cmp"], idaapi.BADADDR),
+                    obfus_size=size_cmp,
+                    comment='DeadIf CMP',
+                    patch_bytes=size_cmp * b'\x90',
+                    name='DeadIf',
+                    action=Action.PATCH
+                )
+
+                size_jmp = idaapi.get_item_size(first_item["jmp"])
+                possible_region.append_obfu(
+                    start_ea=first_item["jmp"],
+                    end_ea=idaapi.next_head(first_item["jmp"], idaapi.BADADDR),
+                    obfus_size=size_jmp,
+                    comment='DeadIf JMP',
+                    patch_bytes=size_jmp * b'\x90',
+                    action=Action.PATCH
+                )
+
+                # add other pairs expression
+                for i in range(1, len(sub_conditions)):
+                    item = sub_conditions[i]
+                    s_cmp = idaapi.get_item_size(item["cmp"])
+                    possible_region.append_obfu(item["cmp"], idaapi.next_head(item["cmp"], idaapi.BADADDR), s_cmp, 'DeadIf CMP', s_cmp * b'\x90', Action.PATCH)
+                    s_jmp = idaapi.get_item_size(item["jmp"])
+                    possible_region.append_obfu(item["jmp"], idaapi.next_head(item["jmp"], idaapi.BADADDR), s_jmp, 'DeadIf JMP', s_jmp * b'\x90', Action.PATCH)
+
+                # 3. find block then/else
+                jmp_ea = self.find_jmp(insn.ea)
                 start_then = end_then = start_else = end_else = idaapi.BADADDR
+
+                # find block then
                 if not insn.cif.ielse and not self.is_break_statement(insn.cif.ithen):
                     start_then = idaapi.next_head(jmp_ea, idaapi.BADADDR)
                     end_then = self.get_end_block(insn.cif.ithen)
                 else:
+                    # find block then/else
                     if not self.is_break_statement(insn.cif.ithen):
                         start_then = self.get_start_block(insn.cif.ithen)
                         end_then = self.get_end_block(insn.cif.ithen)
                     if not self.is_break_statement(insn.cif.ielse):
                         start_else = self.get_start_block(insn.cif.ielse)
                         end_else = self.get_end_block(insn.cif.ielse)
-                print(f"Then: start_blk {hex(start_then)} end_blk {hex(end_then)}")
-                if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
-                    print(f"Else start_else {hex(start_else)} end_else {hex(end_else)}")
 
                 if start_then != idaapi.BADADDR and end_then != idaapi.BADADDR:
                     size_obfus = end_then - start_then
-                    possible_region = ObfuscatedRegion(start_ea = start_then, end_ea = end_then, obfus_size = size_obfus, comment = 'DeadIf Then', patch_bytes = size_obfus * b'\x90', name = 'DeadIf', action = Action.PATCH)
-                    if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
-                        size_obfus = end_else - start_else
-                        possible_region.append_obfu(start_ea = start_else, end_ea = end_else, obfus_size = size_obfus, comment = 'DeadIf Else', patch_bytes = size_obfus * b'\x90', action = Action.PATCH)
+                    possible_region.append_obfu(start_ea=start_then, end_ea=end_then, obfus_size=size_obfus, comment='DeadIf Then', patch_bytes=size_obfus * b'\x90', action=Action.PATCH)
 
-                    sub_conditions = []
-                    self.find_and_or_condition(insn.cif.expr, sub_conditions)
-                    for idx, item in enumerate(sub_conditions):
-                        # print(f'   Sub-Cond {idx+1}: {item["cond"]}')
-                        print(f'      CMP: {hex(item["cmp"])} | JMP: {hex(item["jmp"])}')
-                        if not(start_then <= item["cmp"] < end_then) or not (start_else <= item["cmp"] < end_else):
-                            size_cmp = idaapi.get_item_size(item["cmp"])
-                            possible_region.append_obfu(start_ea = item["cmp"], end_ea = idaapi.next_head(item["cmp"], idaapi.BADADDR), obfus_size = size_cmp, comment = 'DeadIf CMP', patch_bytes = size_cmp * b'\x90', action = Action.PATCH)
-                        if not (start_then <= item["jmp"] < end_then) or not (start_else <= item["jmp"] < end_else):
-                            size_jmp = idaapi.get_item_size(item["jmp"])
-                            possible_region.append_obfu(start_ea = item["jmp"], end_ea = idaapi.next_head(item["jmp"], idaapi.BADADDR), obfus_size = size_jmp, comment = 'DeadIf JMP', patch_bytes = size_jmp * b'\x90', action = Action.PATCH)
+                if start_else != idaapi.BADADDR and end_else != idaapi.BADADDR:
+                    size_obfus = end_else - start_else
+                    possible_region.append_obfu(start_ea=start_else, end_ea=end_else, obfus_size=size_obfus, comment='DeadIf Else', patch_bytes=size_obfus * b'\x90', action=Action.PATCH)
 
-                    self.obfus_region.append(possible_region)
+                self.obfus_region.append(possible_region)
 
         return 0
 
@@ -162,14 +267,11 @@ class DeadIf(Deobfuscator):
     def setup_ui(self):
         super().setup_ui()
 
-        self.lbl_label = QLabel('Condition')
-        self.lbl_label.setObjectName('header_ingredient_recipe')
         self.cmb_equation = QComboBox()
         self.cmb_equation.addItems(['>=', '>', '<', '<=', '=='])
         self.cmb_equation.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ldt_condition = QLineEdit()
         self.layout_input = QHBoxLayout()
-        self.layout_input.addWidget(self.lbl_label)
         self.layout_input.addWidget(self.cmb_equation)
         self.layout_input.addWidget(self.ldt_condition)
         self.layout_body.addLayout(self.layout_input)

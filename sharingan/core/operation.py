@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QListWidgetItem, QVBoxLayout, QAbstractIt
 from sharingan.core.stylesmanager import ManageStyleSheet
 import idaapi
 import sys, os
-            
+
 
 class Operation(QWidget):
     def __init__(self, parent=None, recipe=None):
@@ -16,7 +16,7 @@ class Operation(QWidget):
         self.list_deobfuscator.setStyleSheet(ManageStyleSheet.get_stylesheet())
         self.list_decryption.setStyleSheet(ManageStyleSheet.get_stylesheet())
 
-        # load module into list 
+        # load module into list
         deobf_items = self.get_ingredients('deobfuscator')
         self.list_deobfuscator.addItems(deobf_items)
         decrypt_items = self.get_ingredients('decryption')
@@ -64,8 +64,6 @@ class Operation(QWidget):
                 for module in list_module:
                     filename, ext = os.path.splitext(module)
                     if ext == '.py':
-                        ingredient.append(filename.lower().capitalize())
+                        ingredient.append(filename.lower())
                 return ingredient
         return []
-
-
