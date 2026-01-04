@@ -1,4 +1,5 @@
 # String Finder - Detection and Mapping Only
+from cgitb import reset
 import idautils
 import re
 from math import log2
@@ -26,85 +27,68 @@ class StringFinder:
 
     def find_all_encrypted_strings(self):
         """Find all potentially encrypted strings"""
-        print("[ESF] Scanning for encrypted strings...")
+        print("[Sharingan] Scanning for potentially encrypted strings...")
 
         # Method 0: FLOSS-inspired extraction (static, stack, tight strings)
-        print("[ESF] Running comprehensive string extraction...")
-        extracted_strings = self.extract_comprehensive_strings()
-        print(f"[ESF]   Found {len(extracted_strings)} strings")
-        print('=' * 80)
-        # print('[*]', extracted_strings)
-
-        # # Method 1: Base64-like strings
-        # base64_strings = self._find_base64_strings()
-        # print(f"[ESF]   Found {len(base64_strings)} base64-like strings")
-
-        # # Method 2: High-entropy strings
-        # entropy_strings = self._find_high_entropy_strings()
-        # print(f"[ESF]   Found {len(entropy_strings)} high-entropy strings")
-
-        # # Method 3: Pseudo-gibberish syllabic strings (obfuscated word-like sequences)
-        # gibberish_strings = self._find_pseudo_gibberish_strings()
-        # print(f"[ESF]   Found {len(gibberish_strings)} pseudo-gibberish strings")
-
+        # Static strings (raw segment scan)
+        static_strings = list(self.extractor.extract_static_strings())
+        print(f"[Sharingan]  Found {len(static_strings)} static strings")
+        if static_strings:
+            print(f"\t\t{[x['value'] for x in static_strings]}")
+        
+        # Stack strings (constructed on stack)
+        stack_strings = list(self.extractor.extract_stack_strings())
+        print(f"[Sharingan]   Found {len(stack_strings)} stack strings")
+        if stack_strings:
+            print(f"\t\t{[(x['value'], hex(x['address'])) for x in stack_strings]}")
+        
+        # Tight strings (push immediate sequences)
+        tight_strings = list(self.extractor.extract_tight_strings())
+        print(f"[Sharingan]   Found {len(tight_strings)} tight strings")
+        if tight_strings:
+            print(f"\t\t{[(x['value'], hex(x['address'])) for x in tight_strings]}")
 
         # Merge and deduplicate
-        # all_strings = self.merge_results(base64_strings, entropy_strings, gibberish_strings, extracted_strings)
-        all_strings = self.merge_results(extracted_strings)
-        print(f"[ESF]   Found {len(all_strings)} strings after merging")
+        all_strings = self.merge_results(static_strings)
+        print(f"[Sharingan]   Found {len(all_strings)} strings after merging")
 
         # Filter the results
         all_strings = self.filter_results(all_strings)
-        print(f"[ESF]   Found {len(all_strings)} strings after filtering")
+        print(f"[Sharingan]   Found {len(all_strings)} strings after filtering")
+        
+        # Add stack strings and tight strings to results
+        print(f"[Sharingan]   Adding stack strings and tight strings to results")
+        all_strings = self.merge_results(all_strings, stack_strings, tight_strings)
+
+        # Method 1: Base64-like strings
+        base64_strings = self.find_base64_strings(all_strings)
+        print(f"[Sharingan - Extra]   Found {len(base64_strings)} base64-like strings \n\t\t{base64_strings}")
+
+        # Method 2: High-entropy strings
+        entropy_strings = self.find_high_entropy_strings(all_strings)
+        print(f"[Sharingan - Extra]   Found {len(entropy_strings)} high-entropy strings \n\t\t{entropy_strings}")
+
+        # Method 3: Pseudo-gibberish syllabic strings (obfuscated word-like sequences)
+        gibberish_strings = self.find_pseudo_gibberish_strings(all_strings)
+        print(f"[Sharingan - Extra]   Found {len(gibberish_strings)} pseudo-gibberish strings \n\t\t{gibberish_strings}")
+
         return all_strings
     
-    def extract_comprehensive_strings(self) -> list:
-        results = []
-        
-        # Static strings (raw segment scan)
-        static_strings = self.extractor.extract_static_strings()
-        print(f"Found {len(static_strings)} static strings")
-        results.extend(static_strings)
-        
-        # Stack strings (constructed on stack)
-        stack_strings = self.extractor.extract_stack_strings()
-        print(f"Found {len(stack_strings)} stack strings")
-        for s in stack_strings:
-            s['xref_count'] = len(s.get('xrefs', []))
-            results.append(s)
-        
-        # Tight strings (push immediate sequences)
-        tight_strings = self.extractor.extract_tight_strings()
-        print(f"Found {len(tight_strings)} tight strings")
-        for s in tight_strings:
-            s['xref_count'] = len(s.get('xrefs', []))
-            results.append(s)
-        
-        return results
+    # ------------------------------------------------------------------
+    # Find base64-like strings
+    # ------------------------------------------------------------------
+    def find_base64_strings(self, strings):
+        """Find base64-like strings"""
+        ret = []
 
-    def _find_base64_strings(self):
-        """Find base64-like strings (e.g., 'tw+lvmZw5kffvene')"""
-        results = []
-
-        for s in idautils.Strings():
-            string_value = str(s)
-
+        for s in strings:
+            value = str(s['value'])
             # Check if looks like base64
-            if not self._looks_like_base64(string_value):
+            if not self._looks_like_base64(value):
                 continue
+            ret.append(value)
 
-            # Get where this string is used
-            xrefs = list(idautils.DataRefsTo(s.ea))
-
-            results.append({
-                'value': string_value,
-                'address': s.ea,
-                'type': 'base64-like',
-                'xrefs': xrefs,
-                'xref_count': len(xrefs)
-            })
-
-        return results
+        return ret
 
     def _looks_like_base64(self, s):
         """Check if string looks like base64 with stricter validation."""
@@ -126,33 +110,28 @@ class StringFinder:
 
         return True
 
-    def _find_high_entropy_strings(self):
+    # ------------------------------------------------------------------
+    # Find high-entropy strings
+    # ------------------------------------------------------------------
+    def find_high_entropy_strings(self, strings):
         """Find strings with high entropy (likely encrypted) with additional checks."""
-        results = []
+        ret = []
 
-        for s in idautils.Strings():
-            string_value = str(s)
+        for s in strings:
+            value = str(s['value'])
 
             # Skip if too short
-            if len(string_value) < 10:
+            if len(value) < 10:
                 continue
 
             # Calculate entropy
-            entropy = self._calculate_entropy(string_value)
+            entropy = self._calculate_entropy(value)
 
             # Additional check: Ensure string is not plain text
-            if entropy >= 4.5 and not self._is_plain_text(string_value):
-                xrefs = list(idautils.DataRefsTo(s.ea))
+            if entropy >= 4.5 and not self._is_plain_text(value):
+                ret.append(value)
 
-                results.append({
-                    'value': string_value,
-                    'address': s.ea,
-                    'type': f"high-entropy ({entropy:.2f})",
-                    'xrefs': xrefs,
-                    'xref_count': len(xrefs)
-                })
-
-        return results
+        return ret
 
     def _calculate_entropy(self, s):
         """Calculate Shannon entropy of string"""
@@ -197,58 +176,32 @@ class StringFinder:
             return False
         return ratio > 0.85 and english_ratio >= 0.2
     
-    def merge_results(self, *result_lists):
-        """Merge and deduplicate results"""
-        merged = {}
-
-        for results in result_lists:
-            for item in results:
-                addr = item['address']
-
-                if addr in merged:
-                    # Already exists, merge xrefs
-                    print(addr, item['value'])
-                    existing_xrefs = set(merged[addr]['xrefs'])
-                    new_xrefs = set(item['xrefs'])
-                    merged[addr]['xrefs'] = list(existing_xrefs | new_xrefs)
-                    merged[addr]['xref_count'] = len(merged[addr]['xrefs'])
-                else:
-                    merged[addr] = item
-
-        # Sort by xref count (most used first)
-        results = list(merged.values())
-        results.sort(key=lambda x: x['xref_count'], reverse=True)
-
-        return results
-
-
-
     # ------------------------------------------------------------------
     # Pseudo-gibberish detection
     # ------------------------------------------------------------------
-    def _find_pseudo_gibberish_strings(self):
-        """Detect obfuscated pseudo-lexical strings composed of syllable-like tokens.
-
-        Expanded to catch single-token randomized syllabic strings shorter than 12 chars
-        (e.g. "Vibigezof", "hezahixejo") that were previously missed.
-
-        Core heuristics (multi-token or long single-token >=12):
-          - Total length >= 12
-          - Low English dictionary token ratio (< 0.2)
-          - High vowel/consonant alternation density (avg >= 0.5)
-          - Diversity: >= 6 unique characters
-
-        Short single-token mode (length 8..11):
-          - Length between 8 and 11 inclusive
-          - Alternation score >= 0.65
-          - Vowel proportion between 0.35 and 0.65
-          - Unique bigram count >= max(5, len(bigrams)//2)
-          - Dictionary token ratio == 0
-
-        Excludes: all-uppercase (likely module names), digit-heavy (digit ratio > 0.1),
-        low-diversity (<6 unique chars).
+    def find_pseudo_gibberish_strings(self, strings):
         """
-        results = []
+            Detect obfuscated pseudo-lexical strings composed of syllable-like tokens.
+            Expanded to catch single-token randomized syllabic strings shorter than 12 chars
+            (e.g. "Vibigezof", "hezahixejo") that were previously missed.
+            
+            Core heuristics (multi-token or long single-token >=12):
+            - Total length >= 12
+            - Low English dictionary token ratio (< 0.2)
+            - High vowel/consonant alternation density (avg >= 0.5)
+            - Diversity: >= 6 unique characters
+            
+            Short single-token mode (length 8..11):
+            - Length between 8 and 11 inclusive
+            - Alternation score >= 0.65
+            - Vowel proportion between 0.35 and 0.65
+            - Unique bigram count >= max(5, len(bigrams)//2)
+            - Dictionary token ratio == 0
+            
+            Excludes: all-uppercase (likely module names), digit-heavy (digit ratio > 0.1),
+            low-diversity (<6 unique chars).
+        """
+        ret = []
         vowels = set('aeiou')
         english_small = {
             'the','and','for','with','this','that','from','have','will','info','name','file','data','value','init','error','open','close','read','write','key','user','system','thread','module','load','start','stop','length','time','date','mount','point','volume','lib'
@@ -263,18 +216,18 @@ class StringFinder:
         except Exception:
             pass
 
-        for s in idautils.Strings():
-            val = str(s)
+        for s in strings:
+            value = str(s['value'])
             # Allow shorter single-token strings down to length 8
-            if len(val) < 8:
+            if len(value) < 8:
                 continue
-            if val.isupper():  # skip pure uppercase (module names / constants)
+            if value.isupper():  # skip pure uppercase (module names / constants)
                 continue
-            if any(c.isdigit() for c in val):  # skip if numeric heavy
-                digit_ratio = sum(1 for c in val if c.isdigit()) / len(val)
+            if any(c.isdigit() for c in value):  # skip if numeric heavy
+                digit_ratio = sum(1 for c in value if c.isdigit()) / len(value)
                 if digit_ratio > 0.1:
                     continue
-            tokens = [t for t in re.split(r'[^a-zA-Z]+', val) if t]
+            tokens = [t for t in re.split(r'[^a-zA-Z]+', value) if t]
             if not tokens:
                 continue
             english_hits = sum(1 for t in tokens if t.lower() in english_small)
@@ -282,7 +235,7 @@ class StringFinder:
             # For short single-token candidate we require zero dictionary hits
             # For longer/multi-token allow small ratio (<0.2)
             # Character diversity
-            unique_chars = len(set(val))
+            unique_chars = len(set(value))
             if unique_chars < 6:
                 continue
             # Alternation score: proportion of adjacency changes vowel<->consonant per token aggregated
@@ -345,18 +298,45 @@ class StringFinder:
                     else:
                         accepted = True
             # Avoid duplicates already included by other methods
-            if s.ea in seen_addrs:
+            if s.get('address') in seen_addrs:
                 continue
-            seen_addrs.add(s.ea)
+            seen_addrs.add(s.get('address'))
             if accepted:
-                xrefs = list(idautils.DataRefsTo(s.ea))
-                results.append({
-                    'value': val,
-                    'address': s.ea,
-                    'type': 'pseudo-gibberish',
-                    'xrefs': xrefs,
-                    'xref_count': len(xrefs)
-                })
+                ret.append(value)
             elif debug:
-                print(f"[ESF Gibberish DEBUG] Rejected '{val}' : {reason}")
-        return results
+                print(f"[Sharingan Gibberish DEBUG] Rejected '{value}' : {reason}")
+        return ret
+
+    # ------------------------------------------------------------------
+    # Merge results
+    # ------------------------------------------------------------------
+    def merge_results(self, *result_lists):
+        """Merge and deduplicate results by string value"""
+        merged = {}
+
+        for result in result_lists:
+            for item in result:
+                value = item['value']
+                if not value:
+                    continue
+
+                if value in merged:
+                    # Already exists, merge xrefs and addresses
+                    existing_xrefs = set(merged[value]['xrefs'])
+                    new_xrefs = set(item.get('xrefs', []))
+                    merged[value]['xrefs'] = list(existing_xrefs | new_xrefs)
+                    merged[value]['xref_count'] = len(merged[value]['xrefs'])
+                    
+                    # Track all addresses where this string appears
+                    if 'addresses' not in merged[value]:
+                        merged[value]['addresses'] = [merged[value]['address']]
+                    if item.get('address') and item['address'] not in merged[value]['addresses']:
+                        merged[value]['addresses'].append(item['address'])
+                else:
+                    merged[value] = item.copy()
+                    merged[value]['addresses'] = [item.get('address', 0)]
+
+        # Sort by xref count (most used first)
+        ret = list(merged.values())
+        ret.sort(key=lambda x: x.get('xref_count', 0), reverse=True)
+        return ret

@@ -36,8 +36,8 @@ class DecryptionFunctionAnalyzer:
 
         Returns list of candidate dicts.
         """
-        print(f"\n[ESF] === DECRYPTION FUNCTION ANALYSIS ===")
-        print(f"[ESF] Threshold: Functions referencing >= {min_encrypted_refs} encrypted strings\n")
+        print(f"\n[Sharingan] === DECRYPTION FUNCTION ANALYSIS ===")
+        print(f"[Sharingan] Threshold: Functions referencing >= {min_encrypted_refs} encrypted strings\n")
 
         func_to_encrypted = self._build_function_mapping()
         candidates = {
@@ -45,10 +45,10 @@ class DecryptionFunctionAnalyzer:
         }
 
         if not candidates:
-            print(f"[ESF] No functions found with >= {min_encrypted_refs} encrypted string references")
+            print(f"[Sharingan] No functions found with >= {min_encrypted_refs} encrypted string references")
             return []
 
-        print(f"[ESF] Found {len(candidates)} potential decryption functions\n")
+        print(f"[Sharingan] Found {len(candidates)} potential decryption functions\n")
 
         results: List[Dict] = []
         for func_ea in sorted(candidates.keys()):
@@ -66,13 +66,13 @@ class DecryptionFunctionAnalyzer:
         func_to_encrypted: Dict[int, List[Dict]] = {}
         for enc in self.encrypted_strings:
             for xref_ea in enc.get('xrefs', []) or []:
-                func = ida_funcs.get_func(xref_ea)
-                if not func:
+                func_ea = ida_funcs.get_func(xref_ea)
+                if not func_ea:
                     continue
-                fea = func.start_ea
-                if fea not in func_to_encrypted:
-                    func_to_encrypted[fea] = []
-                func_to_encrypted[fea].append({
+                func_start_ea = func_ea.start_ea
+                if func_start_ea not in func_to_encrypted:
+                    func_to_encrypted[func_start_ea] = []
+                func_to_encrypted[func_start_ea].append({
                     'string_addr': enc['address'],
                     'string_value': enc.get('value', ''),
                     'xref_location': xref_ea,
@@ -217,12 +217,12 @@ class DecryptionFunctionAnalyzer:
 
     # ------------------------------------------------------------------
     def _print_function_analysis(self, result: Dict) -> None:
-        print(f"{'='*80}")
+        print(f"[Sharingan] {'='*80}")
         print(f"Function: {result['function_name']}")
         print(f"Address: 0x{result['function_address']:08X}")
         print(f"{'='*80}")
 
-        print("\nSummary:")
+        print("\n[Sharingan] Summary:")
         print(f"  Encrypted strings referenced: {result['encrypted_string_count']}")
         print(f"  Other strings accessed: {result['other_string_count']}")
         print(f"  Total string references: {result['total_string_refs']}")
@@ -230,7 +230,7 @@ class DecryptionFunctionAnalyzer:
         chars = result['characteristics']
         check = '✓'
         cross = '✗'
-        print("\nCharacteristics:")
+        print("\n[Sharingan] Characteristics:")
         print(f"  Instructions: {chars['instruction_count']}")
         print(f"  Calls: {chars['call_count']}")
         print(f"  Has XOR operations: {check if chars['has_xor'] else cross}")
@@ -244,7 +244,7 @@ class DecryptionFunctionAnalyzer:
             print(f"     Referenced at: 0x{enc['xref_location']:08X}")
 
         if result['other_strings']:
-            print("\nOther strings accessed:")
+            print("\n[Sharingan] Other strings accessed:")
             for i, other in enumerate(result['other_strings'], 1):
                 ref_type = other.get('ref_type', 'unknown')
                 sval = (other.get('value') or '')[:60]
@@ -253,5 +253,5 @@ class DecryptionFunctionAnalyzer:
                 if 'global_var' in other:
                     print(f"     Via global: 0x{other['global_var']:08X}")
         else:
-            print("\nNo other strings found (only encrypted strings)")
+            print("\n[Sharingan] No other strings found (only encrypted strings)")
         print()

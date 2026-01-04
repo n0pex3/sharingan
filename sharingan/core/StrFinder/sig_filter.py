@@ -51,7 +51,7 @@ class SignatureFilter:
                     return True
                 ida_nalt.enum_import_names(i, _cb)
         except Exception as e:
-            print(f"[ESF SigFilter] Import enumeration failed: {e}")
+            print(f"[Sharingan] Import enumeration failed: {e}")
 
     def _build_library_functions(self) -> None:
         try:
@@ -65,7 +65,7 @@ class SignatureFilter:
                         self._lib_funcs.add(name)
                         self._lib_funcs.add(name.lower())
         except Exception as e:
-            print(f"[ESF SigFilter] Library function enumeration failed: {e}")
+            print(f"[Sharingan] Library function enumeration failed: {e}")
 
     def _build_feed_symbols(self) -> None:
         # Include dynamic-loader-adjacent families to improve coverage
@@ -75,7 +75,8 @@ class SignatureFilter:
             "Rtl", "Ldr", "Nt"
         )
         try:
-            # IDA API variance: older builds expose get_til_qty/get_til; some newer builds provide get_tils()
+            # older builds get_til_qty/get_til
+            # newer builds get_tils()
             tils = []
             if hasattr(ida_typeinf, 'get_tils'):
                 # get_tils() may return list/tuple of til objects
@@ -89,7 +90,7 @@ class SignatureFilter:
                     if til:
                         tils.append(til)
             else:
-                print("[ESF SigFilter] Type library enumeration APIs not available; skipping Feeds symbols.")
+                print("[Sharingan] Type library enumeration APIs not available; skipping Feeds symbols.")
 
             for til in tils:
                 try:
@@ -109,12 +110,11 @@ class SignatureFilter:
                         self._feed_symbols.add(name)
                         self._feed_symbols.add(name.lower())
                 except Exception:
-                    # Continue with next til on per-til failure
                     continue
         except Exception as e:
-            print(f"[ESF SigFilter] Feed symbol enumeration fatal error: {e}")
+            print(f"[Sharingan] Feed symbol enumeration fatal error: {e}")
 
-        # Fallback: if no feed symbols gathered, synthesize from imports & lib funcs
+        # If no feed symbols gathered, synthesize from imports & lib funcs
         if not self._feed_symbols:
             synth_source = set()
             synth_source.update(self._imports)
@@ -130,7 +130,7 @@ class SignatureFilter:
                 self._feed_symbols.add(name)
                 self._feed_symbols.add(name.lower())
             if self._feed_symbols:
-                print(f"[ESF SigFilter] Feed fallback synthesized {len(self._feed_symbols)} symbols from imports/lib funcs.")
+                print(f"[Sharingan] Feed fallback synthesized {len(self._feed_symbols)} symbols from imports/lib funcs.")
 
     def _build_feed_recognized(self) -> None:
         try:
@@ -143,7 +143,7 @@ class SignatureFilter:
                     self._feed_recognized.add(fname)
                     self._feed_recognized.add(low)
         except Exception as e:
-            print(f"[ESF SigFilter] Feed recognized function collection failed: {e}")
+            print(f"[Sharingan] Feed recognized function collection failed: {e}")
 
     def _build_loader_context(self) -> None:
         """Build only loader API literal name/pattern sets for direct exclusion.
@@ -160,7 +160,7 @@ class SignatureFilter:
         except Exception:
             pass
         # Optional debug output (disabled):
-        # print(f"[ESF SigFilter] Loader APIs cached: {len(self._loader_names)}")
+        # print(f"[Sharingan] Loader APIs cached: {len(self._loader_names)}")
 
     # ------------------------------------------------------------------
     def is_known_function_literal(self, s: str) -> bool:

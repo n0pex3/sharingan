@@ -1,36 +1,41 @@
 QWidget#list_operation {
     font-size: 22pt;
-    color: rgb(60, 60, 60);
 }
 
 QListWidget#list_operation::item {
-    border-bottom: 1px solid rgb(194, 231, 240);
-    background-color: rgb(220, 236, 246);
+    border-bottom: 1px solid rgba(194, 231, 240, 0.3);
+    background-color: rgba(33, 150, 243, 0.1); 
     padding: 10px;
+}
+
+QListWidget#list_operation::item:selected {
+    background: rgba(8, 91, 245, 0.25); 
+    border: 1px solid rgba(0, 187, 200, 0.5);
+    color: palette(text);
 }
 
 QListWidget#list_recipe::item {
     border-bottom: 1px solid rgb(117, 121, 127);
-    background-color: rgb(226, 239, 218)
+    background-color: rgba(76, 175, 80, 0.15);
 }
 
 QListWidget#list_recipe::item:selected {
-    background: rgb(237,248, 233);
+    background: rgba(76, 175, 80, 0.30);
+    color: palette(text);
 }
 
 QLabel#header_ingredient_recipe {
     font-weight: bold;
     font-size: 14pt;
-    color: rgb(37, 37, 37);
 }
 
 QSplitter::handle:vertical {
     height: 1px;
-    background-color: #ccc;
+    background-color: rgba(200, 200, 200, 0.4);
 }
 
 QTabWidget[applyWindows='true']#disassembler QTabBar::tab {
-    border: 1px solid #ccc;
+    border: 1px solid rgba(128, 128, 128, 0.4);
     border-radius: 5px;
     padding: 8px 12px;
     margin-left: 10px;
@@ -38,11 +43,12 @@ QTabWidget[applyWindows='true']#disassembler QTabBar::tab {
 }
 
 QTabWidget[applyWindows='true']#disassembler QTabBar::tab:selected {
-    border: 1px solid #aaa;
+    background-color: rgba(100, 100, 100, 0.1); /* Highlight active tab slightly */
+    border: 1px solid rgba(128, 128, 128, 0.8);
 }
 
 QTabWidget[applyWindows='true']#disassembler::pane {
-    border: 1px solid #000;
+    border: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 QPushButton[applyWindows='true']#new_tab {

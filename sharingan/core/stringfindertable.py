@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QMenu,
     QPushButton,
     QTableWidget,
@@ -16,7 +17,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
 
 class StringFinderTable(QWidget):
     def __init__(self, string_finder):
@@ -29,6 +29,11 @@ class StringFinderTable(QWidget):
         self.tbl_string = QTableWidget()
         self.btn_scan_code = QPushButton("Scan code", self)
         self.btn_ignore_strings = QPushButton("Ignore", self)
+        self.btn_show_hex = QPushButton("Show Hex", self)
+        self.lbl_string_count = QLabel("0 string", self)
+        self.show_hex_mode = False
+        self.sort_column = -1
+        self.sort_ascending = True
         self._build_workspace()
 
     def _build_workspace(self):
@@ -37,38 +42,41 @@ class StringFinderTable(QWidget):
 
         self.btn_scan_code.clicked.connect(self.scan_code_strings)
         self.btn_ignore_strings.clicked.connect(self.ignore_selected_strings)
+        self.btn_show_hex.clicked.connect(self.show_hex_values)
 
         button_bar = QHBoxLayout()
         button_bar.addWidget(self.btn_scan_code)
         button_bar.addWidget(self.btn_ignore_strings)
+        button_bar.addWidget(self.btn_show_hex)
         button_bar.addStretch()
+        
+        # String count label beside buttons
+        self.lbl_string_count.setStyleSheet("font-weight: bold; padding: 5px;")
+        self.lbl_string_count.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        button_bar.addWidget(self.lbl_string_count)
+        
         layout.addLayout(button_bar)
 
-        self.tbl_string.setColumnCount(6)
+        self.tbl_string.setColumnCount(7)
         self.tbl_string.setHorizontalHeaderLabels(
-            ["", "#", "Raw", "Address", "Preview", "Xref"]
+            ["", "#", "Raw", "Address", "Preview", "Xref", "Type"]
         )
         self.tbl_string.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tbl_string.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tbl_string.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_string.verticalHeader().setVisible(False)
         self.tbl_string.horizontalHeader().setStretchLastSection(False)
-        self.tbl_string.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeToContents
-        )
-        self.tbl_string.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeToContents
-        )
-        self.tbl_string.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.tbl_string.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeToContents
-        )
-        self.tbl_string.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.Stretch
-        )
-        self.tbl_string.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.Stretch
-        )
+        
+        # Enable sorting
+        self.tbl_string.setSortingEnabled(False)  # Disable during population, enable after
+        self.tbl_string.horizontalHeader().sectionClicked.connect(self.sort_by_column)
+        self.tbl_string.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Checkbox
+        self.tbl_string.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)  # #
+        self.tbl_string.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)          # Raw
+        self.tbl_string.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Address
+        self.tbl_string.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)          # Preview
+        self.tbl_string.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Xref
+        self.tbl_string.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Type
 
         header = self.tbl_string.horizontalHeader()
         self.checkbox_header_container = QWidget(header)
@@ -102,8 +110,8 @@ class StringFinderTable(QWidget):
         self.tbl_string.clearContents()
         self.string_row_checkboxes.clear()
         self._last_checkbox_row = None
-        for col in range(1, 6):
-            align = Qt.AlignCenter if col in (1, 3) else None
+        for col in range(1, 7):
+            align = Qt.AlignCenter if col in (1, 3) else None  # Center # and Address
             tooltip = "0" if col == 2 else None
             self.tbl_string.setItem(
                 0, col, self._make_table_item("0", align=align, tooltip=tooltip)
@@ -196,6 +204,10 @@ class StringFinderTable(QWidget):
             action_copy = QAction("Copy Xrefs", menu)
             action_copy.triggered.connect(lambda: self._copy_to_clipboard(row, "xrefs"))
             menu.addAction(action_copy)
+        if col == 6:
+            action = QAction("Copy Type", menu)
+            action.triggered.connect(lambda: self._copy_to_clipboard(row, "type"))
+            menu.addAction(action)
 
         if menu.actions():
             menu.exec_(self.tbl_string.viewport().mapToGlobal(pos))
@@ -310,7 +322,7 @@ class StringFinderTable(QWidget):
         if isinstance(entry, dict):
             entry["preview"] = preview_value
         text = str(preview_value)
-        table_item = self.tbl_string.item(row, 4)
+        table_item = self.tbl_string.item(row, 4)  # Preview is column 4
         if table_item:
             table_item.setText(text)
             table_item.setToolTip(text)
@@ -360,6 +372,9 @@ class StringFinderTable(QWidget):
 
     def populate_string_table(self, strings: list):
         self.string_results = strings or []
+        count = len(self.string_results)
+        self.lbl_string_count.setText(f"{count} string(s)")
+        
         self.tbl_string.setUpdatesEnabled(False)
         self.tbl_string.clearContents()
         for row in range(self.tbl_string.rowCount()):
@@ -370,37 +385,30 @@ class StringFinderTable(QWidget):
             self._position_checkbox_header_button()
             return
 
-        self.tbl_string.setRowCount(len(self.string_results))
+        self.tbl_string.setRowCount(count)
         self.string_row_checkboxes.clear()
         self._last_checkbox_row = None
         for row, item in enumerate(self.string_results):
             idx_item = self._make_table_item(str(row + 1), align=Qt.AlignCenter)
             raw_value = item.get("value", "")
+            type_value = item.get("type", "")
             address = item.get("address", 0)
             preview_value = item.get("preview") or raw_value
             xref_list = item.get("xrefs") or []
-            xref_text = (
-                "\n".join(f"0x{ea:08X}" for ea in xref_list) if xref_list else "0"
-            )
+            xref_text = f"({len(xref_list)} xrefs) {("\n".join(f"0x{ea:08X}" for ea in xref_list) if xref_list else "0")}"
 
             self.tbl_string.setItem(row, 1, idx_item)
-            self.tbl_string.setItem(
-                row, 2, self._make_table_item(raw_value, tooltip=raw_value)
-            )
-            self.tbl_string.setItem(
-                row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter)
-            )
-            self.tbl_string.setItem(
-                row, 4, self._make_table_item(preview_value, tooltip=preview_value)
-            )
-            self.tbl_string.setItem(
-                row, 5, self._make_table_item(xref_text, tooltip=xref_text)
-            )
+            self.tbl_string.setItem(row, 2, self._make_table_item(raw_value, tooltip=raw_value))
+            self.tbl_string.setItem(row, 3, self._make_table_item(f"0x{address:08X}", align=Qt.AlignCenter))
+            self.tbl_string.setItem(row, 4, self._make_table_item(preview_value, tooltip=preview_value))
+            self.tbl_string.setItem(row, 5, self._make_table_item(xref_text, tooltip=xref_text))
+            self.tbl_string.setItem(row, 6, self._make_table_item(type_value, tooltip=type_value))
             self._add_checkbox_to_row(row)
 
         self.tbl_string.setUpdatesEnabled(True)
         self._update_checkbox_header_label()
         self._position_checkbox_header_button()
+
 
     def ignore_selected_strings(self):
         if not self.string_results:
@@ -441,3 +449,71 @@ class StringFinderTable(QWidget):
         self.string_finder.result_filter.ignore_literals.update(new_literals)
         return True
 
+    def show_hex_values(self):
+        """Toggle between text and hex display in Raw column."""
+        self.show_hex_mode = not self.show_hex_mode
+        self.btn_show_hex.setText("Show Text" if self.show_hex_mode else "Show Hex")
+        
+        for row in range(self.tbl_string.rowCount()):            
+            entry = self.string_results[row]
+            raw_value = entry.get("value", "") if isinstance(entry, dict) else ""
+            
+            if not raw_value:
+                continue
+            
+            item = self.tbl_string.item(row, 2)
+            if not item:
+                continue
+            
+            if self.show_hex_mode:
+                # Convert to hex
+                try:
+                    hex_value = raw_value.encode('utf-8', errors='replace').hex(' ').upper()
+                    item.setText(hex_value)
+                    item.setToolTip(f"Hex: {hex_value}\nOriginal: {raw_value}")
+                except Exception as e:
+                    idaapi.msg(f"[Sharingan] Error converting row {row + 1} to hex: {e}\n")
+            else:
+                # Show original text
+                item.setText(raw_value)
+                item.setToolTip(raw_value)
+
+    # ------------------------------------------------------------------
+    # Sorting by column header
+    # ------------------------------------------------------------------
+    def sort_by_column(self, column: int):
+        """Sort table by clicked column header."""
+        if column == 0:  # Skip checkbox column
+            return
+        
+        # Toggle sort order if clicking same column
+        if self.sort_column == column:
+            self.sort_ascending = not self.sort_ascending
+        else:
+            self.sort_column = column
+            self.sort_ascending = True
+        
+        if not self.string_results:
+            return
+        
+        # Define sort keys for each column
+        def sort_key(item):
+            if column == 1:  # "#" - index
+                return self.string_results.index(item)
+            elif column == 2:  # "Raw" column 
+                return item.get('value', '').lower()
+            elif column == 3:  # "Address" column
+                return item.get('address', 0)
+            elif column == 4:  # "Preview" column
+                return (item.get('preview') or item.get('value', '')).lower()
+            elif column == 5:  # "Xref" column
+                return item.get('xref_count', 0)
+            elif column == 6:  # "Type" column
+                return item.get('type', '').lower()
+            return 0
+        
+        # Sort the data
+        sorted_results = sorted(self.string_results, key=sort_key, reverse=not self.sort_ascending)
+        
+        # Repopulate table with sorted data
+        self.populate_string_table(sorted_results)

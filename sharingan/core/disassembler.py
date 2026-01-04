@@ -255,7 +255,7 @@ class ASMView(idaapi.simplecustviewer_t):
         if func is None:
             print("Please provid address within a function")
             return
-        self.cfunc = ida_hexrays.decompile(func)
+        self.cfunc = ida_hexrays.decompile(func_ea)
         self.eamap = self.cfunc.get_eamap()
         if self.cfunc is None:
             print("Failed to decompile!")
@@ -342,7 +342,7 @@ class ASMView(idaapi.simplecustviewer_t):
         if not func:
             return
 
-        cfunc = ida_hexrays.decompile(func)
+        cfunc = ida_hexrays.decompile(func_ea)
         if not cfunc:
             return
 
