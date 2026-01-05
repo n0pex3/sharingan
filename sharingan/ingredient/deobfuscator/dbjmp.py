@@ -34,6 +34,9 @@ class DBJmp(Deobfuscator):
             mod_bytes[1] = 0xE9
             for i in range(6, 12):
                 mod_bytes[i] = 0x90
+        elif len_bytes_jmp == 10:
+            for i in range(5, 10):
+                mod_bytes[i] = 0x90
 
         return mod_bytes
 

@@ -122,7 +122,7 @@ class DeobfuscateUtils:
     def reset(start_addr, end_addr):
         next_addr = start_addr
         while next_addr < end_addr:
-            idc.set_color(next_addr, idc.CIC_ITEM, 0xFFFFFFFF)
+            idaapi.del_item_color(next_addr)
             hr = idaapi.get_hidden_range(next_addr)
             if hr:
                 ba = ida_bytes.get_bytes(hr.start_ea, hr.end_ea - hr.start_ea)
@@ -130,12 +130,9 @@ class DeobfuscateUtils:
                     idaapi.del_hidden_range(next_addr)
                 next_addr = hr.end_ea
                 continue
-            flags = idaapi.get_flags(next_addr)
-            if idaapi.is_code(flags):
-                size_item = idaapi.get_item_size(next_addr)
-                next_addr += size_item if size_item > 0 else 1
-            else:
-                next_addr += 1
+            # if range contain data, it maybe skip data. Below code can be fix but it is very slow performance
+            # next_addr = idaapi.get_item_end(next_addr)
+            next_addr = idaapi.next_head(next_addr, idaapi.BADADDR)
         DeobfuscateUtils.mark_as_code(start_addr, end_addr)
 
     @staticmethod

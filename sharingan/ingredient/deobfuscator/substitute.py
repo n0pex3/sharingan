@@ -7,17 +7,17 @@ from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 
 class Substitute(Deobfuscator):
     def __init__(self):
-        super().__init__('Substitute')
-        self.description = 'Substitute'
-        self.version = '1.0'
+        super().__init__("Substitute")
+        self.description = "Substitute"
+        self.version = "1.0"
 
     def setup_ui(self):
         super().setup_ui()
 
         self.ldt_start_ea = QLineEdit()
-        self.ldt_start_ea.setPlaceholderText('Start EA')
+        self.ldt_start_ea.setPlaceholderText("Start EA")
         self.ldt_end_ea = QLineEdit()
-        self.ldt_end_ea.setPlaceholderText('End EA')
+        self.ldt_end_ea.setPlaceholderText("End EA")
         self.layout_addr = QHBoxLayout()
         self.layout_addr.addWidget(self.ldt_start_ea)
         self.layout_addr.addWidget(self.ldt_end_ea)
@@ -36,11 +36,11 @@ class Substitute(Deobfuscator):
             start_obfu_addr = int(self.ldt_start_ea.text(), 0)
             end_obfu_addr = int(self.ldt_end_ea.text(), 0)
         except:
-            print('[Sharingan] Invalid hex number')
+            print("[Sharingan] Invalid hex number")
             return
 
         if start_obfu_addr >= end_obfu_addr or idaapi.get_imagebase() > start_obfu_addr or idaapi.get_imagebase() > end_obfu_addr:
-            print('[Sharingan] Invalid address')
+            print("[Sharingan] Invalid address")
             return
 
         arr_patching_assem = self.tet_patching_instruction.toPlainText().split('\n')
@@ -71,14 +71,14 @@ class Substitute(Deobfuscator):
                 arr_replace_bytes.extend(mod_bytes)
                 total_bytes_patching += len(mod_bytes)
             except:
-                print('[Sharingan] Invalid assembly')
+                print(f"[Sharingan] Invalid assembly {line}")
                 return
 
         #check enough space to patch and fill nop
         flag_patching = True
         len_bytes_pattern_find_str = len(bytes_pattern_find_str.split())
         if len_bytes_pattern_find_str < total_bytes_patching:
-            print('[Sharingan] Not enough space to patch')
+            print("[Sharingan] Not enough space to patch")
             flag_patching = False
             return
         else:
@@ -99,7 +99,7 @@ class Substitute(Deobfuscator):
                 cmt = '\n'.join(comment)
                 possible_region = ObfuscatedRegion(start_ea = pos_replaced_instr, end_ea = pos_replaced_instr + len_bytes_pattern_find_str,
                                                     obfus_size = len_bytes_pattern_find_str, comment = cmt, patch_bytes = arr_replace_bytes,
-                                                    name = 'substitution', action = Action.PATCH)
+                                                    name = "substitution", action = Action.PATCH)
                 self.possible_obfuscation_regions.append(possible_region)
 
         return self.possible_obfuscation_regions

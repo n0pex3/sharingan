@@ -5,6 +5,7 @@ from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 
 
+# for best result, remove the inside out
 class FinderCondition(ida_hexrays.ctree_visitor_t):
     def __init__(self, func, obfus_region, equation, user_val):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)

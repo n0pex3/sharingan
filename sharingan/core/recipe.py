@@ -35,12 +35,10 @@ class HintRawInsn(idaapi.UI_Hooks):
 
     # override to custom return hint
     def get_custom_viewer_hint(self, viewer, place):
-        if place is None:
-            return None
-        ea = place.toea()
-        hint = self.dict_hints.get(ea)
-        if hint:
-            return hint, len(hint.split('\n'))
+        if place:
+            ea = place.toea()
+            if hint := self.dict_hints.get(ea):
+                return hint, len(hint.split('\n'))
         return None
 
 
@@ -302,8 +300,10 @@ class Recipe(QWidget):
                         is_clear_bookmark = True
                         DeobfuscateUtils.reset(self.start_ea, self.end_ea)
                 # check len found region to add bookmark
+                # sequence instruction
                 if len(r.regions) == 1:
                     self.append_bookmark(r.regions[0].start_ea, r.regions[0].end_ea, hint, is_scan=True)
+                # rambling instruction
                 elif len(r.regions) > 1:
                     min_start = min(reg.start_ea for reg in r.regions)
                     max_end = max(reg.end_ea for reg in r.regions)
@@ -440,7 +440,7 @@ class Recipe(QWidget):
             self.save_manual_bookmarks()
         else:
             # delete manual scanning region if ingredient found, so when cooking those regions not patching
-            # Iterate backwards to safely pop from list
+            # Iterate backwards to safely pop from list found obfuscated region
             for i in range(len(self.obfuscated_regions) - 1, -1, -1):
                 list_regions = self.obfuscated_regions[i]
                 for j in range(len(list_regions) - 1, -1, -1):
@@ -570,7 +570,6 @@ class Recipe(QWidget):
                         end_ea = reg.end_ea
                         start_index_bookmark = self.count_manual_bookmark + 2
                         end_index_bookmark = self.cmb_bookmark.count()
-                        # after comment, remove bookmark
                         index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
                         if index_bookmark:
                             self.cmb_bookmark.removeItem(index_bookmark)
@@ -581,8 +580,10 @@ class Recipe(QWidget):
                         end_ea = reg.end_ea
                         start_index_bookmark = self.count_manual_bookmark + 2
                         end_index_bookmark = self.cmb_bookmark.count()
-                        # after patching, remove bookmark
                         index_bookmark = self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea)
+                        if index_bookmark:
+                            self.cmb_bookmark.removeItem(index_bookmark)
+
                         if index_bookmark:
                             self.cmb_bookmark.removeItem(index_bookmark)
 
@@ -601,7 +602,7 @@ class Recipe(QWidget):
                         # greater than 1 insn
                         else:
                             curr_ea = start_ea
-                            # because bytes contain nop not sequence, it hidden range if found
+                            # because bytes contain nop not sequence bytes, it hidden range if found
                             while curr_ea < end_ea:
                                 # hidden range nop
                                 if DeobfuscateUtils.is_nop(curr_ea):

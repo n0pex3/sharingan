@@ -53,14 +53,15 @@ class DBHook(idaapi.IDB_Hooks):
                             idx_line.add(y)
 
         # add address to list to highlight
-        if ea in self.asm_view.addr_asm_highlight:
+        if ea in self.asm_view.addr_asm_highlight and color == Color.DEFCOLOR:
             self.asm_view.addr_asm_highlight.discard(ea)
             self.asm_view.addr_pseudo_highlight ^= idx_line
             self.asm_view.addr_asm_overlap.discard(ea)
         elif color != Color.BG_BOOKMARK and color != Color.DEFCOLOR:
             if color == Color.BG_HINT:
                 self.asm_view.addr_asm_highlight.add(ea)
-                self.asm_view.addr_pseudo_highlight |= idx_line
+                if idx_line not in self.asm_view.addr_pseudo_highlight:
+                    self.asm_view.addr_pseudo_highlight |= idx_line
             elif color == Color.BG_OVERLAPPING:
                 self.asm_view.addr_asm_overlap.add(ea)
 
@@ -289,7 +290,7 @@ class ASMView(idaapi.simplecustviewer_t):
         if func is None:
             print("[Sharingan] Please provid address within a function")
             return
-        self.cfunc = ida_hexrays.decompile(func_ea)
+        self.cfunc = ida_hexrays.decompile(func)
         self.eamap = self.cfunc.get_eamap()
         if self.cfunc is None:
             print("[Sharingan] Failed to decompile!")
@@ -373,6 +374,8 @@ class ASMView(idaapi.simplecustviewer_t):
             return [], colored_lines, [], raw_lines
 
     def diff_decompiler(self):
+        self.addr_pseudo_highlight.clear()
+
         if not ida_hexrays.init_hexrays_plugin():
             return
 
@@ -380,7 +383,7 @@ class ASMView(idaapi.simplecustviewer_t):
         if not func:
             return
 
-        cfunc = ida_hexrays.decompile(func_ea)
+        cfunc = ida_hexrays.decompile(func)
         if not cfunc:
             return
 
@@ -430,6 +433,9 @@ class ASMView(idaapi.simplecustviewer_t):
         self.Refresh()
 
     def diff_disassembler(self, obfuscated_regions):
+        self.addr_asm_highlight.clear()
+        self.addr_asm_overlap.clear()
+
         # flatten
         intervals = []
         for list_regions in obfuscated_regions:

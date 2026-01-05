@@ -49,12 +49,12 @@ class StringFinderTable(QWidget):
         button_bar.addWidget(self.btn_ignore_strings)
         button_bar.addWidget(self.btn_show_hex)
         button_bar.addStretch()
-        
+
         # String count label beside buttons
         self.lbl_string_count.setStyleSheet("font-weight: bold; padding: 5px;")
         self.lbl_string_count.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         button_bar.addWidget(self.lbl_string_count)
-        
+
         layout.addLayout(button_bar)
 
         self.tbl_string.setColumnCount(7)
@@ -66,7 +66,7 @@ class StringFinderTable(QWidget):
         self.tbl_string.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_string.verticalHeader().setVisible(False)
         self.tbl_string.horizontalHeader().setStretchLastSection(False)
-        
+
         # Enable sorting
         self.tbl_string.setSortingEnabled(False)  # Disable during population, enable after
         self.tbl_string.horizontalHeader().sectionClicked.connect(self.sort_by_column)
@@ -374,7 +374,7 @@ class StringFinderTable(QWidget):
         self.string_results = strings or []
         count = len(self.string_results)
         self.lbl_string_count.setText(f"{count} string(s)")
-        
+
         self.tbl_string.setUpdatesEnabled(False)
         self.tbl_string.clearContents()
         for row in range(self.tbl_string.rowCount()):
@@ -453,18 +453,18 @@ class StringFinderTable(QWidget):
         """Toggle between text and hex display in Raw column."""
         self.show_hex_mode = not self.show_hex_mode
         self.btn_show_hex.setText("Show Text" if self.show_hex_mode else "Show Hex")
-        
-        for row in range(self.tbl_string.rowCount()):            
+
+        for row in range(self.tbl_string.rowCount()):
             entry = self.string_results[row]
             raw_value = entry.get("value", "") if isinstance(entry, dict) else ""
-            
+
             if not raw_value:
                 continue
-            
+
             item = self.tbl_string.item(row, 2)
             if not item:
                 continue
-            
+
             if self.show_hex_mode:
                 # Convert to hex
                 try:
@@ -485,22 +485,22 @@ class StringFinderTable(QWidget):
         """Sort table by clicked column header."""
         if column == 0:  # Skip checkbox column
             return
-        
+
         # Toggle sort order if clicking same column
         if self.sort_column == column:
             self.sort_ascending = not self.sort_ascending
         else:
             self.sort_column = column
             self.sort_ascending = True
-        
+
         if not self.string_results:
             return
-        
+
         # Define sort keys for each column
         def sort_key(item):
             if column == 1:  # "#" - index
                 return self.string_results.index(item)
-            elif column == 2:  # "Raw" column 
+            elif column == 2:  # "Raw" column
                 return item.get('value', '').lower()
             elif column == 3:  # "Address" column
                 return item.get('address', 0)
@@ -511,9 +511,9 @@ class StringFinderTable(QWidget):
             elif column == 6:  # "Type" column
                 return item.get('type', '').lower()
             return 0
-        
+
         # Sort the data
         sorted_results = sorted(self.string_results, key=sort_key, reverse=not self.sort_ascending)
-        
+
         # Repopulate table with sorted data
         self.populate_string_table(sorted_results)

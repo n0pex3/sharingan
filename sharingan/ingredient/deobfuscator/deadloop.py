@@ -5,6 +5,8 @@ from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
 from PySide6.QtWidgets import QLineEdit, QComboBox, QHBoxLayout, QLabel, QSizePolicy
 
 
+# only support remove body loop, experiement currently
+# for best result, remove the inside out
 class BlockScanner(ida_hexrays.ctree_visitor_t):
     def __init__(self, flowchart):
         ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
@@ -146,12 +148,6 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
                             patch_bytes=b_size * b'\x90',
                             action=Action.PATCH
                         )
-
-                    # start_expr = self.get_start_block(loop_expr)
-                    # end_expr = self.get_end_block(loop_expr)
-
-                    # size_expr = end_expr - start_expr
-                    # possible_region.append_obfu(start_ea = start_expr, end_ea = end_expr, obfus_size = size_expr, comment = 'Expr Loop', patch_bytes = size_expr * b'\x90', action = Action.PATCH)
 
                     self.obfus_region.append(possible_region)
 
