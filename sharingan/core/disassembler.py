@@ -53,7 +53,7 @@ class DBHook(idaapi.IDB_Hooks):
                             idx_line.add(y)
 
         # add address to list to highlight
-        if ea in self.asm_view.addr_asm_highlight and color == Color.DEFCOLOR:
+        if ea in self.asm_view.addr_asm_highlight:
             self.asm_view.addr_asm_highlight.discard(ea)
             self.asm_view.addr_pseudo_highlight ^= idx_line
             self.asm_view.addr_asm_overlap.discard(ea)

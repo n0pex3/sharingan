@@ -35,13 +35,13 @@ class StringFinder:
         print(f"[Sharingan]  Found {len(static_strings)} static strings")
         if static_strings:
             print(f"\t\t{[x['value'] for x in static_strings]}")
-        
+
         # Stack strings (constructed on stack)
         stack_strings = list(self.extractor.extract_stack_strings())
         print(f"[Sharingan]   Found {len(stack_strings)} stack strings")
         if stack_strings:
             print(f"\t\t{[(x['value'], hex(x['address'])) for x in stack_strings]}")
-        
+
         # Tight strings (push immediate sequences)
         tight_strings = list(self.extractor.extract_tight_strings())
         print(f"[Sharingan]   Found {len(tight_strings)} tight strings")
@@ -55,7 +55,7 @@ class StringFinder:
         # Filter the results
         all_strings = self.filter_results(all_strings)
         print(f"[Sharingan]   Found {len(all_strings)} strings after filtering")
-        
+
         # Add stack strings and tight strings to results
         print(f"[Sharingan]   Adding stack strings and tight strings to results")
         all_strings = self.merge_results(all_strings, stack_strings, tight_strings)
@@ -73,7 +73,7 @@ class StringFinder:
         print(f"[Sharingan - Extra]   Found {len(gibberish_strings)} pseudo-gibberish strings \n\t\t{gibberish_strings}")
 
         return all_strings
-    
+
     # ------------------------------------------------------------------
     # Find base64-like strings
     # ------------------------------------------------------------------
@@ -175,7 +175,7 @@ class StringFinder:
         if english_ratio < 0.2 and len(s) >= 12:
             return False
         return ratio > 0.85 and english_ratio >= 0.2
-    
+
     # ------------------------------------------------------------------
     # Pseudo-gibberish detection
     # ------------------------------------------------------------------
@@ -184,20 +184,20 @@ class StringFinder:
             Detect obfuscated pseudo-lexical strings composed of syllable-like tokens.
             Expanded to catch single-token randomized syllabic strings shorter than 12 chars
             (e.g. "Vibigezof", "hezahixejo") that were previously missed.
-            
+
             Core heuristics (multi-token or long single-token >=12):
             - Total length >= 12
             - Low English dictionary token ratio (< 0.2)
             - High vowel/consonant alternation density (avg >= 0.5)
             - Diversity: >= 6 unique characters
-            
+
             Short single-token mode (length 8..11):
             - Length between 8 and 11 inclusive
             - Alternation score >= 0.65
             - Vowel proportion between 0.35 and 0.65
             - Unique bigram count >= max(5, len(bigrams)//2)
             - Dictionary token ratio == 0
-            
+
             Excludes: all-uppercase (likely module names), digit-heavy (digit ratio > 0.1),
             low-diversity (<6 unique chars).
         """
@@ -326,7 +326,7 @@ class StringFinder:
                     new_xrefs = set(item.get('xrefs', []))
                     merged[value]['xrefs'] = list(existing_xrefs | new_xrefs)
                     merged[value]['xref_count'] = len(merged[value]['xrefs'])
-                    
+
                     # Track all addresses where this string appears
                     if 'addresses' not in merged[value]:
                         merged[value]['addresses'] = [merged[value]['address']]
