@@ -62,10 +62,22 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 
 ### Decryption
 
-- Pipeline: drag decryptors into `Recipe`, select strings, and `Preview/Cook` to apply sequentially.
+![String Decryption](images/srtdec.png)
+
 - Byte ops: `Xor`, `XorStr` (repeating key), `Add`, `Sub`, `Rol` (byte-wise rotate).
 - Ciphers: `RC4`, `AES` (ECB/CBC with IV), `DES` (ECB/CBC); keys/IVs are padded or truncated to valid sizes.
 - Encoding: `Base64` with automatic padding fixups for truncated inputs.
+- Pipeline: 
+  * Select strings.
+  * Drag decryptors into `Recipe`.
+  * Click `Preview` to apply sequentially. Rresults will write in preview, so that user can freely cook-as-their-can.
+  * Click `Cook` to apply decryptors to all selected strings sequentially. Then comment results at their appeared address.
+
 
 ## Acknowledgement
-FLOSS, CyberChef, patching
+Special thanks to the following projects whose inspiring us about ideas and tooling partially shaped Sharingan:
+
+- [**FLOSS**](https://github.com/mandiant/flare-floss): for pioneering robust string deobfuscation, stack string extraction, and plugin workflow design in IDA. Several stack-string and API-likeness heuristics in Sharingan are derived or adapted from its methodology.
+- [**CyberChef**](https://gchq.github.io/CyberChef): for inspiring the visual, recipe-based approach to transform and decode data in a modular "drag-and-drop" pipeline. Sharingan borrows from CyberChef's UX concept for mix-and-match operations (especially in string decryption and byte encoding).
+
+Their innovation and openness are deeply appreciated.

@@ -405,16 +405,13 @@ class Recipe(QWidget):
             return raw_values
         results = []
         for raw in raw_values:
-            current = raw
             for step in pipeline:
                 try:
-                    current = step.decrypt(current)
+                    raw = step.decrypt(raw)
                 except Exception as exc:
                     print(f"[Sharingan] {step.name} decrypt failed: {exc}")
                     break
-                print('[Sharingan] Done', step)
-            results.append(current)
-
+            results.append(raw)
         return results
 
     def preview(self):

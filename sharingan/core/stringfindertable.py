@@ -1,6 +1,6 @@
 import ida_kernwin
 import idaapi
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QItemSelectionModel
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -24,7 +24,7 @@ class StringFinderTable(QWidget):
         self.string_finder = string_finder
         self.string_results = []
         self.string_row_checkboxes = []
-        self._last_checkbox_row = None
+        self.last_checkbox_row = None
         self.checkbox_header_index = 0
         self.tbl_string = QTableWidget()
         self.btn_scan_code = QPushButton("Scan code", self)
@@ -62,7 +62,7 @@ class StringFinderTable(QWidget):
             ["", "#", "Raw", "Address", "Preview", "Xref", "Type"]
         )
         self.tbl_string.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.tbl_string.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tbl_string.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tbl_string.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tbl_string.verticalHeader().setVisible(False)
         self.tbl_string.horizontalHeader().setStretchLastSection(False)
@@ -83,22 +83,20 @@ class StringFinderTable(QWidget):
         container_layout = QHBoxLayout(self.checkbox_header_container)
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setAlignment(Qt.AlignCenter)
+
         self.checkbox_header_button = QToolButton(self.checkbox_header_container)
         self.checkbox_header_button.setAutoRaise(True)
         self.checkbox_header_button.setCursor(Qt.PointingHandCursor)
         self.checkbox_header_button.setToolTip("Toggle all selections")
         self.checkbox_header_button.clicked.connect(self._handle_header_checkbox_button)
         container_layout.addWidget(self.checkbox_header_button)
+
         header.sectionResized.connect(self._position_checkbox_header_button)
         header.sectionMoved.connect(self._position_checkbox_header_button)
         header.geometriesChanged.connect(self._position_checkbox_header_button)
         self.tbl_string.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tbl_string.customContextMenuRequested.connect(
-            self._show_table_context_menu
-        )
-        self.tbl_string.horizontalScrollBar().valueChanged.connect(
-            self._position_checkbox_header_button
-        )
+        self.tbl_string.customContextMenuRequested.connect(self._show_table_context_menu)
+        self.tbl_string.horizontalScrollBar().valueChanged.connect(self._position_checkbox_header_button)
 
         layout.addWidget(self.tbl_string)
         self._initialize_string_table_placeholders()
@@ -109,18 +107,16 @@ class StringFinderTable(QWidget):
         self.tbl_string.setRowCount(1)
         self.tbl_string.clearContents()
         self.string_row_checkboxes.clear()
-        self._last_checkbox_row = None
+        self.last_checkbox_row = None
         for col in range(1, 7):
-            align = Qt.AlignCenter if col in (1, 3) else None  # Center # and Address
+            align = Qt.AlignCenter if col in (1, 3) else None  # Center Index and Address
             tooltip = "0" if col == 2 else None
             self.tbl_string.setItem(
                 0, col, self._make_table_item("0", align=align, tooltip=tooltip)
             )
         self._add_checkbox_to_row(0, enabled=False, track=False)
 
-    def _make_table_item(
-        self, text: str, align: Qt.Alignment | None = None, tooltip: str | None = None
-    ):
+    def _make_table_item(self, text: str, align: Qt.Alignment | None = None, tooltip: str | None = None):
         item = QTableWidgetItem(text)
         flags = item.flags()
         item.setFlags(flags & ~Qt.ItemIsEditable)
@@ -134,10 +130,8 @@ class StringFinderTable(QWidget):
         checkbox = QCheckBox(self.tbl_string)
         checkbox.setEnabled(enabled)
         if enabled:
-            checkbox.stateChanged.connect(self._on_row_checkbox_state_changed)
-            checkbox.clicked.connect(
-                lambda checked, r=row: self._handle_row_checkbox_clicked(r, checked)
-            )
+            checkbox.stateChanged.connect(self._update_checkbox_header_label)
+            checkbox.clicked.connect(lambda checked, r=row: self._handle_row_checkbox_clicked(r, checked))
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -147,15 +141,12 @@ class StringFinderTable(QWidget):
         if enabled and track:
             self.string_row_checkboxes.append(checkbox)
 
-    def _on_row_checkbox_state_changed(self, _state):
-        self._update_checkbox_header_label()
-
     def _handle_row_checkbox_clicked(self, row: int, checked: bool):
         self._select_row_from_checkbox(row)
         modifiers = QApplication.keyboardModifiers()
-        if modifiers & Qt.ShiftModifier and self._last_checkbox_row is not None:
-            self._set_checkbox_range_state(self._last_checkbox_row, row, checked)
-        self._last_checkbox_row = row
+        if modifiers & Qt.ShiftModifier and self.last_checkbox_row is not None:
+            self._set_checkbox_range_state(self.last_checkbox_row, row, checked)
+        self.last_checkbox_row = row
 
     def _set_checkbox_range_state(self, start_row: int, end_row: int, state: bool):
         if not self.string_row_checkboxes:
@@ -179,7 +170,11 @@ class StringFinderTable(QWidget):
             return
         row = index.row()
         col = index.column()
-        self.tbl_string.selectRow(row)
+
+        selection_model = self.tbl_string.selectionModel()
+        if selection_model:
+            if row not in {idx.row() for idx in selection_model.selectedRows()}:
+                selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
         menu = QMenu(self.tbl_string)
         if col == 2:
@@ -208,6 +203,12 @@ class StringFinderTable(QWidget):
             action = QAction("Copy Type", menu)
             action.triggered.connect(lambda: self._copy_to_clipboard(row, "type"))
             menu.addAction(action)
+
+        if self._selection_rows():
+            menu.addSeparator()
+            action_copy_rows = QAction("Copy Selected Rows", menu)
+            action_copy_rows.triggered.connect(self._copy_selected_rows)
+            menu.addAction(action_copy_rows)
 
         if menu.actions():
             menu.exec_(self.tbl_string.viewport().mapToGlobal(pos))
@@ -276,7 +277,7 @@ class StringFinderTable(QWidget):
             cb.blockSignals(True)
             cb.setChecked(state)
             cb.blockSignals(False)
-        self._last_checkbox_row = None
+        self.last_checkbox_row = None
         self._update_checkbox_header_label()
 
     def _handle_header_checkbox_button(self):
@@ -284,10 +285,7 @@ class StringFinderTable(QWidget):
         self._set_all_row_checkboxes(select_all)
 
     def _position_checkbox_header_button(self, *args):
-        if (
-            not hasattr(self, "checkbox_header_container")
-            or not self.checkbox_header_container
-        ):
+        if  not hasattr(self, "checkbox_header_container") or not self.checkbox_header_container:
             return
         header = self.tbl_string.horizontalHeader()
         if self.checkbox_header_index >= header.count():
@@ -297,6 +295,9 @@ class StringFinderTable(QWidget):
         self.checkbox_header_container.setGeometry(x, 0, width, header.height())
         self.checkbox_header_container.show()
 
+    # ------------------------------------------------------------------
+    # Retrieve all selected string rows
+    # ------------------------------------------------------------------
     def get_selected_string_rows(self):
         selected_rows = []
         for idx, checkbox in enumerate(self.string_row_checkboxes):
@@ -304,6 +305,46 @@ class StringFinderTable(QWidget):
                 selected_rows.append(idx)
         return selected_rows
 
+    def _selection_rows(self):
+        selection_model = self.tbl_string.selectionModel()
+        if not selection_model:
+            return []
+        return sorted({idx.row() for idx in selection_model.selectedRows()})
+
+    def _copy_selected_rows(self):
+        rows = self._selection_rows()
+        if not rows or not self.string_results:
+            return
+        headers = ["#", "Raw", "Address", "Preview", "Xref", "Type"]
+        lines = ["\t".join(headers)]
+        for row in rows:
+            if not (0 <= row < len(self.string_results)):
+                continue
+            entry = self.string_results[row]
+            raw_value = str(entry.get("value", ""))
+            address = entry.get("address", 0)
+            preview_value = str(entry.get("preview") or raw_value)
+            xrefs = entry.get("xrefs") or []
+            xref_text = f"{len(xrefs)}"
+            type_value = str(entry.get("type", ""))
+            lines.append(
+                "\t".join(
+                    [
+                        str(row + 1),
+                        raw_value,
+                        f"0x{address:08X}",
+                        preview_value,
+                        xref_text,
+                        type_value,
+                    ]
+                )
+            )
+        if len(lines) > 1:
+            QApplication.clipboard().setText("\n".join(lines))
+
+    # ------------------------------------------------------------------
+    # Get snapshot of string table for the new tab
+    # ------------------------------------------------------------------
     def get_string_table_snapshot(self):
         if not self.string_results:
             return []
@@ -315,21 +356,9 @@ class StringFinderTable(QWidget):
                 snapshot.append((item, None))
         return snapshot
 
-    def _apply_preview_to_row(self, row: int, preview_value) -> bool:
-        if not (0 <= row < len(self.string_results)):
-            return False
-        entry = self.string_results[row]
-        if isinstance(entry, dict):
-            entry["preview"] = preview_value
-        text = str(preview_value)
-        table_item = self.tbl_string.item(row, 4)  # Preview is column 4
-        if table_item:
-            table_item.setText(text)
-            table_item.setToolTip(text)
-        else:
-            self.tbl_string.setItem(row, 4, self._make_table_item(text, tooltip=text))
-        return True
-
+    # ------------------------------------------------------------------
+    # Apply decryption result to preview column of selected string row
+    # ------------------------------------------------------------------
     def update_preview_at_location(self, ea, preview_value):
         if ea is None or not self.string_results:
             return False
@@ -345,13 +374,23 @@ class StringFinderTable(QWidget):
             )
             if current != target:
                 continue
-            if self._apply_preview_to_row(row, preview_value):
-                updated = True
+            if isinstance(entry, dict):
+                entry["preview"] = preview_value
+            text = str(preview_value)
+            table_item = self.tbl_string.item(row, 4)  # Preview is column 4
+            if table_item:
+                table_item.setText(text)
+                table_item.setToolTip(text)
+            else:
+                self.tbl_string.setItem(row, 4, self._make_table_item(text, tooltip=text))
+            updated = True
         return updated
 
-    def update_preview_row(self, row_index: int, preview_value):
-        return self._apply_preview_to_row(row_index, preview_value)
-
+    # ------------------------------------------------------------------
+    # Scan code strings
+    # Trigger to scan all code sections for potentially encrypted strings 
+    # from static strings, stack strings, and tight strings,
+    # ------------------------------------------------------------------
     def scan_code_strings(self):
         if self.string_finder is None:
             idaapi.msg("[Sharingan] String Finder modules unavailable.\n")
@@ -370,6 +409,9 @@ class StringFinderTable(QWidget):
         self.btn_scan_code.setText("Scan code")
         self.populate_string_table(results)
 
+    # ------------------------------------------------------------------
+    # Filling string table with results
+    # ------------------------------------------------------------------
     def populate_string_table(self, strings: list):
         self.string_results = strings or []
         count = len(self.string_results)
@@ -379,6 +421,7 @@ class StringFinderTable(QWidget):
         self.tbl_string.clearContents()
         for row in range(self.tbl_string.rowCount()):
             self.tbl_string.setCellWidget(row, self.checkbox_header_index, None)
+
         if not self.string_results:
             self._initialize_string_table_placeholders()
             self.tbl_string.setUpdatesEnabled(True)
@@ -387,7 +430,7 @@ class StringFinderTable(QWidget):
 
         self.tbl_string.setRowCount(count)
         self.string_row_checkboxes.clear()
-        self._last_checkbox_row = None
+        self.last_checkbox_row = None
         for row, item in enumerate(self.string_results):
             idx_item = self._make_table_item(str(row + 1), align=Qt.AlignCenter)
             raw_value = item.get("value", "")
@@ -409,25 +452,33 @@ class StringFinderTable(QWidget):
         self._update_checkbox_header_label()
         self._position_checkbox_header_button()
 
-
+    # ------------------------------------------------------------------
+    # Ignore selected strings, 
+    # saved them into User Roaming Directory then try to copy into bundle ignore_string in ida plugin directory
+    # ------------------------------------------------------------------
     def ignore_selected_strings(self):
         if not self.string_results:
             idaapi.msg("[Sharingan] No strings available to ignore.\n")
             return
+
         selected_rows = self.get_selected_string_rows()
         if not selected_rows:
             idaapi.msg("[Sharingan] Please select at least one string to ignore.\n")
             return
+
         values_to_ignore = []
         for row in selected_rows:
             item = self.tbl_string.item(row, 2)
             if item and item.text():
                 values_to_ignore.append(item.text())
+
         if not values_to_ignore:
             idaapi.msg("[Sharingan] Unable to determine selected string values.\n")
             return
+
         if not self._append_ignore_strings(values_to_ignore):
             return
+        
         selected_set = set(selected_rows)
         remaining_results = [
             entry
@@ -449,17 +500,20 @@ class StringFinderTable(QWidget):
         self.string_finder.result_filter.ignore_literals.update(new_literals)
         return True
 
+    # ------------------------------------------------------------------
+    # Show hex values in Raw column
+    # ------------------------------------------------------------------
     def show_hex_values(self):
         """Toggle between text and hex display in Raw column."""
         self.show_hex_mode = not self.show_hex_mode
         self.btn_show_hex.setText("Show Text" if self.show_hex_mode else "Show Hex")
 
+        if len(self.string_results) == 0:
+            return
+
         for row in range(self.tbl_string.rowCount()):
             entry = self.string_results[row]
             raw_value = entry.get("value", "") if isinstance(entry, dict) else ""
-
-            if not raw_value:
-                continue
 
             item = self.tbl_string.item(row, 2)
             if not item:
@@ -468,7 +522,7 @@ class StringFinderTable(QWidget):
             if self.show_hex_mode:
                 # Convert to hex
                 try:
-                    hex_value = raw_value.encode('utf-8', errors='replace').hex(' ').upper()
+                    hex_value = raw_value.encode('utf-8', errors='replace').hex().upper()
                     item.setText(hex_value)
                     item.setToolTip(f"Hex: {hex_value}\nOriginal: {raw_value}")
                 except Exception as e:

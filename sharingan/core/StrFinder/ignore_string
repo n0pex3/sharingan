@@ -83,3 +83,10 @@ HH:mm:ss
 __fastcall
 __clrcall
 log10
+GetDC
+ReleaseDC
+StrStrIW
+SHGetFolderPathW
+SHGetSpecialFolderPathW
+StrRChrW
+Sleep

@@ -142,20 +142,17 @@ class IgnoreStringStore:
 
 _ignore_store: IgnoreStringStore | None = None
 
-
 def get_ignore_store(create: bool = True) -> IgnoreStringStore | None:
     global _ignore_store
     if _ignore_store is None and create:
         _ignore_store = IgnoreStringStore()
     return _ignore_store
 
-
 def apply_ignore_store(result_filter) -> IgnoreStringStore | None:
     store = get_ignore_store()
     if store:
         store.apply_to_result_filter(result_filter)
     return store
-
 
 def flush_user_ignore_to_bundle() -> None:
     store = get_ignore_store(create=False)
