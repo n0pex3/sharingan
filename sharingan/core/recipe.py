@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QSizePolicy, QCheckBox
-from PySide6.QtCore import Qt, Signal, QObject
+from PySide6.QtCore import Qt, Signal, QObject, Slot
 from sharingan.base.dragdroprecipe import DragDropRecipe
 from sharingan.core.utils import DeobfuscateUtils, Color, ManageStyleSheet, OperatorMode
 from sharingan.base.ingredient import Decryption, Deobfuscator
@@ -56,7 +56,7 @@ class PatchedBytesVistor(object):
 
 # signal for filter action in asm_view or disassembler ida
 class FilterSignal(QObject):
-    filter_ = Signal(int, int)
+    filter_ = Signal(object, object)
 
 
 class Recipe(QWidget):
@@ -240,6 +240,7 @@ class Recipe(QWidget):
             self.list_recipe.clear()
 
     # add ingredient substitute into recipe (column2) via option filter (asm_view/disassembler)
+    @Slot(object, object)
     def add_ingredient_substitute(self, start_ea, end_ea):
         obj_substitute = self.list_recipe.classify_algorithm('substitute')
         if obj_substitute:

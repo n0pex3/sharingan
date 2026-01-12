@@ -144,14 +144,14 @@ class Filter(idaapi.action_handler_t):
             raw_end = idaapi.tag_remove(end_line).split()
             if raw_end:
                 end_ea = int(raw_end[0], 16)
-                end_ea = idaapi.next_head(end_ea, idaapi.BADADDR)
+                end_ea = idaapi.get_item_end(end_ea)
         else:
             # handle single line
             colored_line = idaapi.get_custom_viewer_curline(ctx.widget, False)
             raw_line = idaapi.tag_remove(colored_line).split()
             if raw_line:
                 start_ea = int(raw_line[0], 16)
-                end_ea = start_ea
+                end_ea = idaapi.get_item_end(start_ea)
 
         # send start_ea/end_ea for recipe to add ingredient
         if start_ea != idaapi.BADADDR:

@@ -68,10 +68,11 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
                     return True
         return False
 
+    # please update instruction before jump condition if not found
     def is_cmp_test(self, addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
-        return instr.itype == idaapi.NN_cmp or instr.itype == idaapi.NN_test
+        return instr.itype == idaapi.NN_cmp or instr.itype == idaapi.NN_test or instr.itype == idaapi.NN_and
 
     def is_jmp(self, addr):
         return idc.print_insn_mnem(addr).startswith("j")
