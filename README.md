@@ -79,5 +79,6 @@ Special thanks to the following projects whose inspiring us about ideas and tool
 
 - [**FLOSS**](https://github.com/mandiant/flare-floss): for pioneering robust string deobfuscation, stack string extraction, and plugin workflow design in IDA. Several stack-string and API-likeness heuristics in Sharingan are derived or adapted from its methodology.
 - [**CyberChef**](https://gchq.github.io/CyberChef): for inspiring the visual, recipe-based approach to transform and decode data in a modular "drag-and-drop" pipeline. Sharingan borrows from CyberChef's UX concept for mix-and-match operations (especially in string decryption and byte encoding).
+- [**Patching**](https://github.com/gaasedelen/patching): for building custom UI and learning how to use some IDAPython apis.
 
 Their innovation and openness are deeply appreciated.
