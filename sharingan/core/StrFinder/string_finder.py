@@ -1,9 +1,3 @@
-# String Finder - Detection and Mapping Only
-from cgitb import reset
-import idautils
-import re
-from math import log2
-
 from .ignore_store import apply_ignore_store
 from .result_filter import ResultFilter
 from .string_extractor import FLOSSStringExtractor

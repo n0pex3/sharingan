@@ -17,7 +17,7 @@ class Base64(Decryption):
             cleaned += b"=" * (4 - (len(cleaned) % 4))
         try:
             decoded = b64decode(cleaned, validate=False)
-        except Exception as exc:
-            print(f"[Sharingan] Base64 decrypt failed: {exc}")
+        except Exception as e:
+            print(f"[Sharingan] {raw} Base64 decrypt failed: {e}")
             return raw
-        return DecryptionUtils.to_preview_string(decoded)
+        return decoded

@@ -18,11 +18,15 @@ class Rc4(Decryption):
         self.layout_body.addLayout(form)
 
     def decrypt(self, raw):
-        data = DecryptionUtils.normalize_bytes(raw)
-        key = DecryptionUtils.parse_byte_sequence(self.key_input.text(), fallback=b"\x00")
-        if not key:
-            key = b"\x00"
-        return DecryptionUtils.to_preview_string(self._rc4(key, data))
+        try:
+            data = DecryptionUtils.normalize_bytes(raw)
+            key = DecryptionUtils.parse_byte_sequence(self.key_input.text(), fallback=b"\x00")
+            if not key:
+                key = b"\x00"
+            return DecryptionUtils.to_preview_string(self._rc4(key, data))
+        except Exception as e:
+            print(f"[Sharingan] {raw} RC4 decrypt failed: {e}")
+            return raw
 
     @staticmethod
     def _rc4(key: bytes, data: bytes) -> bytes:
