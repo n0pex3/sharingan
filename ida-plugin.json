@@ -12,6 +12,7 @@
     "pythonDependencies": [
       "pycryptodome==3.23.0",
       "pycryptodomex==3.23.0",
+      "PySide6==6.10.1",
       "unicorn==2.1.4"
     ],
     "urls": {
