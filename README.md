@@ -61,7 +61,7 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 7. You can **SHOW HEX** to see value as hex value.
 8. You can select multiple rows and copy them as table to process them by your self. (not affected to `CHECKED` strings)
 
-## Technique Details
+## Exist Modules
 
 ### Deobfuscation
 
@@ -91,3 +91,7 @@ Special thanks to the following projects whose inspiring us about ideas and tool
 - [**Patching**](https://github.com/gaasedelen/patching): for building custom UI and learning how to use some IDAPython apis.
 
 Their innovation and openness are deeply appreciated.
+
+## Author
+- [**congtrung2k1**](https://github.com/congtrung2k1)
+- [**Do Minh Huy**](https://github.com/n0pex3)

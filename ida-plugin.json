@@ -1,0 +1,31 @@
+{
+  "IDAMetadataDescriptorVersion": 1,
+  "plugin": {
+    "name": "Sharingan",
+    "entryPoint": "zharingan.py",
+    "version": "1.0.0",
+    "idaVersions": ["9.1", "9.2"],
+    "platforms": ["windows-x86_64", "macos-aarch64"],
+    "description": "Assist IDA users with deobfuscation and string/data decryption through a drag-and-drop recipe workflow.",
+    "categories": ["deobfuscation"],
+    "keywords": ["deobfuscation", "decryption"],
+    "pythonDependencies": [
+      "pycryptodome==3.23.0",
+      "pycryptodomex==3.23.0",
+      "unicorn==2.1.4"
+    ],
+    "urls": {
+      "repository": "https://github.com/n0pex3/sharingan"
+    },
+    "authors": [
+      {
+        "name": "Do Minh Huy",
+        "email": "minhuy2197@gmail.com"
+      },
+      {
+        "name": "congtrung2k1",
+        "email": "congtrung2k1@gmail.com"
+      }
+    ]
+  }
+}
