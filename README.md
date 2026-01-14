@@ -39,7 +39,7 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 
 ![UI of Sharingan](images/components.png)
 
-1. Select a range in IDA and use the disassembly right-click menu to **Bookmark** it (or **Filter** to add a substitute; **Exclude** to revert a false positive). Bookmarks appear in the combo box and are persisted per-IDB. In additional to, selecting mode display to switch view assembly/decompiler/string.
+1. Select a range in IDA and use the disassembly right-click menu to **Bookmark** it (or **Filter** to add a substitute; **Exclude** to revert a false positive) or use button **Choose** to quickly select range. Bookmarks appear in the combo box and are persisted per-IDB. In additional to, selecting mode display to switch view assembly/decompiler/string.
 2. Toggle options in **Recipe**:
    - `Compact`: hide the disassembler/decompiler pane for side-by-side layouts.
    - `Auto patch`: apply patches automatically when preview.
@@ -73,6 +73,7 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 - `DeadLoop`: Hex-Rays-driven scan for constant-condition loops; strips loop blocks to remove dead control flow. Only support remove loop body currently.
 - `Propagate`: emulates indirect jmp/call chains with Unicorn to recover real targets and drops a comment with the resolved address.
 - `Substitute`: user-provided start/end and replacement assembly; searches matching byte patterns in-range, assembles the patch, and pads with NOP as needed.
+- **Note: Deobfuscation can be bypass. Please update code to defeat.**
 
 ### Decryption
 

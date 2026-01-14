@@ -3,7 +3,7 @@
   "plugin": {
     "name": "Sharingan",
     "entryPoint": "zharingan.py",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "idaVersions": ["9.2"],
     "platforms": ["windows-x86_64", "macos-aarch64"],
     "description": "Assist IDA users with deobfuscation and string/data decryption through a drag-and-drop recipe workflow.",
@@ -20,7 +20,7 @@
     "authors": [
       {
         "name": "Do Minh Huy",
-        "email": "minhuy2197@gmail.com"
+        "email": "minhhuy2197@gmail.com"
       },
       {
         "name": "congtrung2k1",
