@@ -56,10 +56,14 @@ class Des(Decryption):
         else:
             cipher = _DES.new(key, _DES.MODE_ECB)
 
-        block_size = _DES.block_size
-        aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
-        decrypted = cipher.decrypt(aligned)
-        return DecryptionUtils.to_preview_string(decrypted)
+        try:
+            block_size = _DES.block_size
+            aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
+            decrypted = cipher.decrypt(aligned)
+            return DecryptionUtils.to_preview_string(decrypted)
+        except Exception as e:
+            print(f"[Sharingan] {raw} DES decrypt failed: {e}")
+            return raw
 
     @staticmethod
     def _normalize_key(key: bytes) -> bytes:

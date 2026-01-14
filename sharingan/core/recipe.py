@@ -1,7 +1,14 @@
+from typing import Any
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QSizePolicy, QCheckBox
 from PySide6.QtCore import Qt, Signal, QObject, Slot
 from sharingan.base.dragdroprecipe import DragDropRecipe
-from sharingan.core.utils import DeobfuscateUtils, Color, ManageStyleSheet, OperatorMode
+from sharingan.core.utils import (
+    DeobfuscateUtils,
+    DecryptionUtils,
+    Color,
+    ManageStyleSheet,
+    OperatorMode,
+)
 from sharingan.base.ingredient import Decryption, Deobfuscator
 from sharingan.base.obfuscatedregion import Action, ListObfuscatedRegion
 import ida_bytes, idaapi, idc
@@ -340,51 +347,35 @@ class Recipe(QWidget):
 
     # manip data in table of string mode in module disassembler
     def preview_decryption(self):
-        pipeline = self._get_active_decryption_pipeline()
+        pipeline = self.get_active_decryption_pipeline()
         if not pipeline:
             print("[Sharingan] No active decryption ingredients.")
-            return
+            return None
 
-        selected_indices = self.disassembler.get_selected_string_indices()
+        selected_indices = self.disassembler.get_checked_box_rows()
         if not selected_indices:
             print("[Sharingan] No selected strings to decrypt.")
-            return
+            return None
 
-        tbl_string = getattr(self.disassembler, "tbl_string", None)
-        if tbl_string is None or not isinstance(tbl_string, list):
-            print("[Sharingan] tbl_string not available in disassembler.")
-            return
-
-        selection_meta = []
+        selection = []
         raw_values = []
         for idx in selected_indices:
-            if not (0 <= idx < len(tbl_string)):
-                print(f"[Sharingan] Selection index {idx} is out of range.")
-                continue
-            entry = tbl_string[idx]
-            if isinstance(entry, (tuple, list)) and len(entry) > 0:
-                raw = entry[0]
-                ea = entry[1] if len(entry) > 1 else None
-            else:
-                raw = entry
-                ea = None
-            raw_values.append(raw)
-            selection_meta.append((idx, ea))
+            entry = self.disassembler.get_string_entry(idx)
+            raw_values.append(entry.get("value"))
+            selection.append(idx)
 
         if not raw_values:
             print("[Sharingan] No valid strings selected for preview.")
-            return
+            return None
 
         decrypted_values = self.run_decryption(raw_values, pipeline=pipeline) or raw_values
 
-        for (row_idx, ea), preview_value in zip(selection_meta, decrypted_values):
-            updated = False
-            if ea is not None and hasattr(self.disassembler, "update_preview_at_location"):
-                updated = self.disassembler.update_preview_at_location(ea, preview_value)
-            if not updated and hasattr(self.disassembler, "update_preview_for_row"):
-                self.disassembler.update_preview_for_row(row_idx, preview_value)
+        for row_idx, preview_value in zip(selection, decrypted_values):
+            self.disassembler.update_preview(row_idx, preview_value)
 
-    def _get_active_decryption_pipeline(self):
+        return selection, decrypted_values
+
+    def get_active_decryption_pipeline(self):
         pipeline = []
         for i in range(self.list_recipe.count()):
             item = self.list_recipe.item(i)
@@ -399,7 +390,6 @@ class Recipe(QWidget):
         return pipeline
 
     def run_decryption(self, raw_values, pipeline=None):
-        pipeline = pipeline or self._get_active_decryption_pipeline()
         if not raw_values:
             return []
         if not pipeline:
@@ -407,11 +397,9 @@ class Recipe(QWidget):
         results = []
         for raw in raw_values:
             for step in pipeline:
-                try:
-                    raw = step.decrypt(raw)
-                except Exception as exc:
-                    print(f"[Sharingan] {step.name} decrypt failed: {exc}")
-                    break
+                raw = step.decrypt(raw)
+            if isinstance(raw, (bytes, bytearray)):
+                raw = DecryptionUtils.to_preview_string(bytes(raw))
             results.append(raw)
         return results
 
@@ -572,8 +560,35 @@ class Recipe(QWidget):
         self.highlight_hint()
         self.highlight_overlapping()
 
+    # cook decryption for string mode
+    def cook_strings(self):
+        selection, decrypted_values = self.preview_decryption()
+        if not decrypted_values:
+            print("[Sharingan] No valid strings selected for cooking.")
+            return
+
+        for idx, preview_value in zip(selection, decrypted_values):
+            entry = self.disassembler.get_string_entry(idx)
+
+            targets = set()
+            targets.add(entry.get("address"))
+            for x in entry.get("xrefs") or []:
+                targets.add(x)
+
+            if not targets:
+                continue
+
+            for addr in targets:
+                ida_bytes.set_cmt(addr, str(preview_value), 0)
+
+        print("[Sharingan] Done string cooking.")
+
     # patch/cook
     def cook(self):
+        if self.list_recipe.mode == OperatorMode.DECRYPTION and getattr(self.disassembler, "is_current_tab_string_mode", lambda: False)():
+            self.cook_strings()
+            return
+
         if self.check_overlapping_regions():
             print('[Sharingan] Please resolve all overlapping region!')
             return

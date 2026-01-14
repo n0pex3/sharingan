@@ -15,8 +15,6 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 
 ## Features
 
-
-
 - **Easy UI**: Borrowed the drag-and-drop idea from CyberChef to keep things smooth and simple.
 - **Dual mode pipeline**: switch between deobfuscation and decryption.
 - **Built-in ingredients**: deobfuscators (`apihammering`, `dbjmp`, `deadif`, `deadloop`, `propagate`, `substitute`) and decryptors (`aes`, `rc4`, `xor`, `xorstr`, `base64`, `add`, `des`, `rol`, `sub`).
@@ -32,20 +30,36 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 - IDA Pro 9.x with Hex-Rays installed (pseudocode preview relies on `ida_hexrays`).
 - Install Python 3.12 or later and all packages in requirements.txt
 
-
 ## Usage
-
-![UI of Sharingan](images/components.png)
 
 1. Launch via `Alt+F9` or `Edit → Plugins → Sharingan`.
 2. In **Operation**, choose the mode (Deobfuscation/Decryption) and drag-and-drop ingredients into **Recipe**.
-3. Select a range in IDA and use the disassembly right-click menu to **Bookmark** it (or **Filter** to add a substitute; **Exclude** to revert a false positive). Bookmarks appear in the combo box and are persisted per-IDB. In additional to, selecting mode display to switch view assembly/decompiler/string.
-4. Toggle options in **Recipe**:
+
+### Deobfuscation
+
+![UI of Sharingan](images/components.png)
+
+1. Select a range in IDA and use the disassembly right-click menu to **Bookmark** it (or **Filter** to add a substitute; **Exclude** to revert a false positive). Bookmarks appear in the combo box and are persisted per-IDB. In additional to, selecting mode display to switch view assembly/decompiler/string.
+2. Toggle options in **Recipe**:
    - `Compact`: hide the disassembler/decompiler pane for side-by-side layouts.
    - `Auto patch`: apply patches automatically when preview.
    - `All binary`: operate on the entire binary instead of a selection.
-5. Click **Preview** to show the found obfuscated regions in the docked `asm_view` (ASM or Hex-Rays). Use **Reset** to clear scanning entries; **Delete** to remove ingredients from the recipe; **Resolve** to mark selected region from Bookmark as done and delete it. After ensuring the found regions are corrent, use **Cook** to apply patches and display changes before/after.
-6. Each tab represents a region. There is a button new tab to handle many different regions. 
+3. Click **Preview** to show the found obfuscated regions in the docked `asm_view` (ASM or Hex-Rays). Use **Reset** to clear scanning entries; **Delete** to remove ingredients from the recipe; **Resolve** to mark selected region from Bookmark as done and delete it. After ensuring the found regions are corrent, use **Cook** to apply patches and display changes before/after.
+4. Each tab represents a region. There is a button new tab to handle many different regions.
+
+### Decryption
+
+![UI for String Decryption](images/strdecrypt.png)
+
+1. Press **SCAN CODE** to scan all ascii/unicode from static strings of IDA strings, stack strings/tigh strings from function emulator (All of them go through some filters before showing).
+2. Select garbage strings by `CHECK` on rows, then press **IGNORE** to blacklist them (will be filtered later on).
+    > If you want to undo it, remove them from *%IDAdir%\plugins\sharingan\sharingan\core\StrFinder\ignore_string* or *%APPDATA%\Roaming\Hex-Rays\IDA Pro\plugins\sharingan\core\StrFinder\ignore_string*
+3. Select potential strings by `CHECK` on rows.
+4. Drag decryptors into **Recipe**.
+5. Then press **PREVIEW** to decrypt all of them sequentially and show values at **preview** columns.
+6. Click **COOK** to decrypt all of `CHECKED` strings and `COMMENT` the preview to its address and xrefs. 
+7. You can **SHOW HEX** to see value as hex value.
+8. You can select multiple rows and copy them as table to process them by your self. (not affected to `CHECKED` strings)
 
 ## Technique Details
 
@@ -63,16 +77,11 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 ### Decryption
 
 ![String Decryption](images/srtdec.png)
+![View raw as hex](images/strhex.png)
 
 - Byte ops: `Xor`, `XorStr` (repeating key), `Add`, `Sub`, `Rol` (byte-wise rotate).
 - Ciphers: `RC4`, `AES` (ECB/CBC with IV), `DES` (ECB/CBC); keys/IVs are padded or truncated to valid sizes.
 - Encoding: `Base64` with automatic padding fixups for truncated inputs.
-- Pipeline: 
-  * Select strings.
-  * Drag decryptors into `Recipe`.
-  * Click `Preview` to apply sequentially. Rresults will write in preview, so that user can freely cook-as-their-can.
-  * Click `Cook` to apply decryptors to all selected strings sequentially. Then comment results at their appeared address.
-
 
 ## Acknowledgement
 Special thanks to the following projects whose inspiring us about ideas and tooling partially shaped Sharingan:

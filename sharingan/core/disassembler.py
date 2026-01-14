@@ -1,5 +1,4 @@
 import difflib
-import os
 import platform
 import threading
 
@@ -545,7 +544,7 @@ class DisassembleTab(QWidget):
             self.string_finder = StringFinder()
         except Exception as exc:
             self.string_finder = None
-            idaapi.msg(f"[Sharingan] Failed to initialize StringFinder: {exc}\n")
+            print(f"[Sharingan] Failed to initialize StringFinder: {exc}\n")
 
         self.setup_ui()
 
@@ -588,17 +587,17 @@ class DisassembleTab(QWidget):
         layout.addLayout(layout_toolbar, stretch=1)
         layout.addWidget(self.layout_stack, stretch=10)
 
-    def get_selected_string_rows(self):
-        return self.string_table.get_selected_string_rows()
-
     def get_string_table_snapshot(self):
         return self.string_table.get_string_table_snapshot()
 
-    def update_preview_at_location(self, ea, preview_value):
-        return self.string_table.update_preview_at_location(ea, preview_value)
+    def get_checked_box_rows(self):
+        return self.string_table.get_checked_box_rows()
 
-    def update_preview_row(self, row_index: int, preview_value):
-        return self.string_table.update_preview_row(row_index, preview_value)
+    def get_string_entry(self, row_idx: int):
+        return self.string_table.get_row(row_idx)
+
+    def update_preview(self, row_idx, preview_value):
+        return self.string_table.update_preview(row_idx, preview_value)
 
     def scan_code_strings(self):
         self.string_table.scan_code_strings()
@@ -730,9 +729,7 @@ class DisassembleTab(QWidget):
 
 # class handle list tab disassembler
 class Disassembler(QTabWidget):
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         super().__init__()
         self.setTabsClosable(True)
         self.setUsesScrollButtons(True)
@@ -757,18 +754,11 @@ class Disassembler(QTabWidget):
 
     def _current_tab(self):
         idx = self.currentIndex()
-        if 0 <= idx < len(self.tab_contents):
-            return self.tab_contents[idx]
-        return None
+        return self.tab_contents[idx]
 
-    @property
-    def tbl_string(self):
+    def is_current_tab_string_mode(self):
         tab = self._current_tab()
-        return tab.get_string_table_snapshot() if tab else []
-
-    def update_preview_for_row(self, row_idx, preview_value):
-        tab = self._current_tab()
-        return tab.update_preview_row(row_idx, preview_value) if tab else False
+        return tab.cmb_mode.currentText() == "String"
 
     def set_tab_signal_filter(self, signal_filter):
         self.signal_filter = signal_filter
@@ -792,15 +782,17 @@ class Disassembler(QTabWidget):
             self.removeTab(index)
             self.tab_contents.pop(index)
 
-    def get_selected_string_indices(self):
+    def get_checked_box_rows(self):
         tab = self._current_tab()
-        return tab.get_selected_string_rows() if tab else []
+        return tab.get_checked_box_rows() if tab else []
 
-    def update_preview_at_location(self, ea, preview_value):
+    def get_string_entry(self, row_idx):
         tab = self._current_tab()
-        if not tab:
-            return False
-        return tab.update_preview_at_location(ea, preview_value)
+        return tab.get_string_entry(row_idx) if tab else None
+
+    def update_preview(self, row_idx, preview_value):
+        tab = self._current_tab()
+        return tab.update_preview(row_idx, preview_value) if tab else False
 
     def get_tab_line_edit_texts(self, index):
         return (

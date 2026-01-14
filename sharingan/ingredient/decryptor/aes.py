@@ -56,10 +56,14 @@ class Aes(Decryption):
         else:
             cipher = _AES.new(key, _AES.MODE_ECB)
 
-        block_size = _AES.block_size
-        aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
-        decrypted = cipher.decrypt(aligned)
-        return DecryptionUtils.to_preview_string(decrypted)
+        try:
+            block_size = _AES.block_size
+            aligned = DecryptionUtils.ensure_block_multiple(data, block_size)
+            decrypted = cipher.decrypt(aligned)
+            return DecryptionUtils.to_preview_string(decrypted)
+        except Exception as e:
+            print(f"[Sharingan] {raw} AES decrypt failed: {e}")
+            return raw
 
     @staticmethod
     def _normalize_aes_key(key: bytes) -> bytes:
