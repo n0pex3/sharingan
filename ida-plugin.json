@@ -3,7 +3,7 @@
   "plugin": {
     "name": "sharingan",
     "entryPoint": "zharingan.py",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "idaVersions": ["9.2"],
     "platforms": ["windows-x86_64", "macos-aarch64"],
     "description": "Assist IDA users with deobfuscation and string/data decryption through a drag-and-drop recipe workflow.",
