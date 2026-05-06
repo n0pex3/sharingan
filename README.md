@@ -15,7 +15,7 @@ Assist IDA users with deobfuscation and string/data decryption through a drag-an
 
 ## Features
 
-![Demo](demo.gif)
+![Demo](images/demo.gif)
 
 - **Easy UI**: Borrowed the drag-and-drop idea from CyberChef to keep things smooth and simple.
 - **Dual mode pipeline**: switch between deobfuscation and decryption.
