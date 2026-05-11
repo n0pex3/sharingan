@@ -43,7 +43,7 @@ class Substitute(Deobfuscator):
             print("[Sharingan] Invalid address")
             return
 
-        arr_patching_assem = self.tet_patching_instruction.toPlainText().split('\n')
+        arr_patching_assem = [l for l in self.tet_patching_instruction.toPlainText().split('\n') if l.strip()]
         bytes_pattern_find_str = ''
         comment = []
         is_32bit = idaapi.inf_is_32bit_exactly()
@@ -70,8 +70,8 @@ class Substitute(Deobfuscator):
                 mod_bytes = idaapi.AssembleLine(0, 0, 0, is_32bit, line)
                 arr_replace_bytes.extend(mod_bytes)
                 total_bytes_patching += len(mod_bytes)
-            except:
-                print(f"[Sharingan] Invalid assembly {line}")
+            except Exception as e:
+                print(f"[Sharingan] Invalid assembly {line} - {str(e)}")
                 return
 
         #check enough space to patch and fill nop

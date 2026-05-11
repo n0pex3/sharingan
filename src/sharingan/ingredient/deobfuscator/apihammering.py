@@ -1,6 +1,6 @@
 from sharingan.base.ingredient import Deobfuscator
 from PySide6.QtWidgets import QLineEdit, QCheckBox, QHBoxLayout
-import idaapi, ida_bytes, idautils, idc
+import idaapi, idautils, idc
 import re
 from sharingan.core.utils import DeobfuscateUtils
 from sharingan.base.obfuscatedregion import ObfuscatedRegion, Action
@@ -41,7 +41,7 @@ class APIHammering(Deobfuscator):
             for i in range(0, count_import):
                 name_module = idaapi.get_import_module_name(i)
                 if not name_module:
-                    print('[Sharingan] Failed to get module {i}')
+                    print(f'[Sharingan] Failed to get module {i}')
                     continue
                 idaapi.enum_import_names(i, self.callback_enumerate_xref)
         return self.possible_obfuscation_regions
@@ -54,7 +54,7 @@ class APIHammering(Deobfuscator):
         # ([^)]*) => matches any character except a closing parenthesis )
         params_match = re.findall(r'\(([^)]*)\)', prototype)
         if len(params_match) > 0:
-            param_list = params_match[1].split(',')
+            param_list = params_match[-1].split(',')
             if len(param_list) > 0 and param_list[0] != '':
                 return len(param_list)
         return -1
@@ -62,10 +62,9 @@ class APIHammering(Deobfuscator):
     def enumerate_xref(self, api_addr, name_api, ord_api):
         self.possible_obfuscation_regions.clear()
         # ida auto regconize calling register is calling api via calculating
-        code_refs = list(idautils.CodeRefsTo(api_addr, 0))
         # directly call from data segment
-        data_refs = list(idautils.DataRefsTo(api_addr))
-        all_xrefs = code_refs + data_refs
+        # prevent duplicate lead to overlap region
+        all_xrefs = set(idautils.CodeRefsTo(api_addr, 0)) | set(idautils.DataRefsTo(api_addr))
         for addr_call in all_xrefs:
             # exclude mov register, pointer_api
             if not DeobfuscateUtils.is_call(addr_call) or not (self.range_start <= addr_call < self.range_end):
@@ -96,7 +95,8 @@ class APIHammering(Deobfuscator):
                         break
                     elif DeobfuscateUtils.is_mov(prev_addr):
                         print(f"[Sharingan] Maybe push {hex(prev_addr)}")
-                        pass
+                        print('Please review manually and update code')
+                        break
                 self.possible_obfuscation_regions.append(possible_region)
             else:
                 print('[Sharingan] Please define prototype API')

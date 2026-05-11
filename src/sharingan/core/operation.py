@@ -56,6 +56,8 @@ class Operation(QWidget):
     def get_ingredients(self, folder_module) -> list:
         path_plugin = idaapi.get_ida_subdirs('plugins')
         target_subpath = os.path.join('sharingan', 'ingredient', folder_module)
+        # if not os.path.isdir(target_subpath):
+        #     target_subpath = os.path.join('sharingan', 'sharingan', 'ingredient', folder_module)
         for path in path_plugin:
             module_dir = os.path.join(path, target_subpath)
             if not os.path.isdir(module_dir):

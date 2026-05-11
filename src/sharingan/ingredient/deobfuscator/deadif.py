@@ -22,6 +22,11 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
             '<=': [26, 27]                  # cot_sle, cot_ule
         }
         self.COT_NUM = 61                   # cot_num
+        self.FLAG_SETTING_INSNS = {
+            idaapi.NN_cmp, idaapi.NN_test, idaapi.NN_and,
+            idaapi.NN_or,  idaapi.NN_xor,  idaapi.NN_sub,
+            idaapi.NN_add
+        }
 
     def check_numeric_logic(self, expr):
         if not expr:
@@ -32,6 +37,8 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
 
         target_ops = self.op_map.get(self.equation, [])
         if expr.op not in target_ops:
+            return False
+        if not expr or not hasattr(expr, 'y') or expr.y is None:
             return False
         if expr.y.op == self.COT_NUM:
             code_val = expr.y.n._value
@@ -72,7 +79,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
     def is_cmp_test(self, addr):
         instr = idaapi.insn_t()
         idaapi.decode_insn(instr, addr)
-        return instr.itype in [idaapi.NN_cmp, idaapi.NN_test, idaapi.NN_and]
+        return instr.itype in self.FLAG_SETTING_INSNS
 
     def is_jmp(self, addr):
         return idc.print_insn_mnem(addr).startswith("j")
@@ -94,7 +101,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
             start_blk, _ = self.get_boundary_block(insn.ea)
             return start_blk
 
-        if insn.op is ida_hexrays.cit_block and not insn.cblock.empty():
+        if insn.op == ida_hexrays.cit_block and not insn.cblock.empty():
             return self.get_start_block(insn.cblock.front())
 
         return idaapi.BADADDR
@@ -103,7 +110,7 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
         if not insn:
             return idaapi.BADADDR
 
-        if insn.op is idaapi.cit_block:
+        if insn.op == idaapi.cit_block:
             if insn.cblock.empty():
                 return self.get_start_block(insn)
             return self.get_end_block(insn.cblock.back())
@@ -134,9 +141,13 @@ class FinderCondition(ida_hexrays.ctree_visitor_t):
                 })
 
     def find_jmp(self, jmp_ea):
-        while not self.is_jmp(jmp_ea):
+        start_blk, end_blk = self.get_boundary_block(jmp_ea)
+        bound = end_blk if end_blk else jmp_ea + 32
+        while jmp_ea != idaapi.BADADDR and jmp_ea < bound:
+            if self.is_jmp(jmp_ea):
+                return jmp_ea
             jmp_ea = idaapi.next_head(jmp_ea, idaapi.BADADDR)
-        return jmp_ea
+        return idaapi.BADADDR
 
     def visit_insn(self, insn):
         if insn.op == ida_hexrays.cit_if:
@@ -238,13 +249,17 @@ class DeadIf(Deobfuscator):
         equation = self.cmb_equation.currentText()
         condition = self.ldt_condition.text()
 
+        if not condition.strip():
+            print("[Sharingan] Please enter a condition value.")
+            return
+
         if not ida_hexrays.init_hexrays_plugin():
             print("[Sharingan] Hex-Rays decompiler not available.")
-            exit()
+            return
         f = idaapi.get_func(start_addr)
         if not f:
             print("[Sharingan] Please select a function.")
-            exit()
+            return
         cfunc = ida_hexrays.decompile(f)
         if cfunc:
             print(f"\n[Sharingan] [v] ANALYSIS LOG FOR: {idaapi.get_func_name(f.start_ea)}")

@@ -9,6 +9,7 @@ from sharingan.core.utils import (
     ManageStyleSheet,
     OperatorMode,
 )
+from sharingan.core.region_registry import Region, RegionKind, RegionRegistry, RegionRenderer
 from sharingan.base.ingredient import Decryption, Deobfuscator
 from sharingan.base.obfuscatedregion import Action, ListObfuscatedRegion
 import ida_bytes, idaapi, idc
@@ -81,6 +82,12 @@ class Recipe(QWidget):
         self.hint_hook = HintRawInsn()
         self.hint_hook.hook()
 
+        # registry holds typed regions; renderer paints them on disassembler
+        self.registry = RegionRegistry()
+        self.renderer = RegionRenderer(self.registry)
+        if not self.renderer.hook():
+            print('[Sharingan] RegionRenderer hook failed')
+
         self.disassembler = disassembler
 
         self.signal_filter = FilterSignal()
@@ -94,6 +101,7 @@ class Recipe(QWidget):
         self.list_recipe.setStyleSheet(ManageStyleSheet.get_stylesheet())
         # when append or delete bookmark (manual), it auto save. So when lost tab or exit ida, it can load previous bookmark
         self.load_bookmarks()
+        self.load_patched_regions()
 
     def setup_ui(self):
         self.list_recipe = DragDropRecipe()
@@ -142,8 +150,19 @@ class Recipe(QWidget):
         self.layout.addWidget(self.btn_cook)
         self.setLayout(self.layout)
 
+    # explicit teardown so plugin close path doesn't rely on GC for unhooking
+    def cleanup(self):
+        try:
+            self.hint_hook.unhook()
+        except Exception:
+            pass
+        try:
+            self.renderer.unhook()
+        except Exception:
+            pass
+
     def __del__(self):
-        self.hint_hook.unhook()
+        self.cleanup()
 
     # check if bookmark is saved to restore
     def get_bookmark_node(self):
@@ -153,6 +172,69 @@ class Recipe(QWidget):
         if node.index() == idaapi.BADADDR:
             node.create(NODE_NAME)
         return node
+
+    def get_patched_node(self):
+        NODE_NAME = "$sharingan_patched"
+        node = idaapi.netnode(NODE_NAME)
+        if node.index() == idaapi.BADADDR:
+            node.create(NODE_NAME)
+        return node
+
+    # persist PATCHED entries so the visual marker survives IDA restart
+    def save_patched_regions(self):
+        node = self.get_patched_node()
+        node.supdel_all(idaapi.stag)
+        patched = self.registry.all([RegionKind.PATCHED])
+        node.altset(0, len(patched))
+        for i, r in enumerate(patched):
+            text = f"{r.start_ea}|{r.end_ea}|{r.hint}"
+            node.supset(i, text.encode('utf-8'))
+
+    def load_patched_regions(self):
+        node = self.get_patched_node()
+        if node.index() == idaapi.BADADDR:
+            return
+        count = node.altval(0)
+        if count <= 0:
+            return
+        for i in range(count):
+            val = node.supstr(i)
+            if not val:
+                continue
+            parts = val.split('|', 2)
+            if len(parts) < 2:
+                continue
+            try:
+                s = int(parts[0])
+                e = int(parts[1])
+            except ValueError:
+                continue
+            hint = parts[2] if len(parts) == 3 else ''
+            self.registry.add(Region(s, e, RegionKind.PATCHED, hint))
+        idaapi.refresh_idaview_anyway()
+
+    # mirror current combobox bookmarks into registry; HINT/OVERLAP/PATCHED untouched
+    def sync_bookmarks_to_registry(self):
+        self.registry.clear([RegionKind.MANUAL_BM, RegionKind.SCAN_BM])
+        scan_label_idx = self.count_manual_bookmark + 1
+        for i in range(1, self.cmb_bookmark.count()):
+            if i == scan_label_idx:
+                continue
+            s, e = self.parse_start_end_region(i)
+            if not s and not e:
+                continue
+            parts = self.cmb_bookmark.itemText(i).split(' - ', 2)
+            hint = parts[2] if len(parts) == 3 else ''
+            kind = RegionKind.MANUAL_BM if i <= self.count_manual_bookmark else RegionKind.SCAN_BM
+            self.registry.add(Region(s, e, kind, hint))
+
+    # push HINT/OVERLAP intervals to every tab so highlights survive tab switches
+    def push_highlights_to_view(self):
+        hint_iv = [(r.start_ea, r.end_ea) for r in self.registry.all([RegionKind.HINT])]
+        overlap_iv = [(r.start_ea, r.end_ea) for r in self.registry.all([RegionKind.OVERLAP])]
+        for idx in range(self.disassembler.count()):
+            self.disassembler.update_tab_highlights(idx, hint_iv, overlap_iv)
+        idaapi.refresh_idaview_anyway()
 
     # cmb_bookmark is saved into database ida
     def save_bookmarks(self):
@@ -198,6 +280,8 @@ class Recipe(QWidget):
             self.cmb_bookmark.model().item(scanning_label_idx).setEnabled(False)
 
         self.cmb_bookmark.blockSignals(False)
+        self.sync_bookmarks_to_registry()
+        idaapi.refresh_idaview_anyway()
         print(f"[Sharingan] Restored bookmarks.")
 
     # value in QComboBox is text and seperated by dash. Splitting start and end region via dash
@@ -221,11 +305,15 @@ class Recipe(QWidget):
             self.cmb_bookmark.removeItem(index)
 
         self.obfuscated_regions.clear()
+        # PATCHED + MANUAL_BM survive reset; scanning state is wiped
+        self.registry.clear([RegionKind.SCAN_BM, RegionKind.HINT, RegionKind.OVERLAP])
+
         active_index = self.disassembler.currentIndex()
         self.disassembler.clear_highlight(active_index)
         if not is_preview:
             self.disassembler.clear_tab_asmview(active_index)
         self.save_bookmarks()
+        idaapi.refresh_idaview_anyway()
         print('[Sharingan] Reset all')
 
     # delete item in list recipe
@@ -331,6 +419,7 @@ class Recipe(QWidget):
                     max_end = max(reg.end_ea for reg in r.regions)
                     self.append_bookmark(min_start, max_end, hint, is_scan=True)
 
+        self.sync_bookmarks_to_registry()
         self.save_bookmarks()
         #highlight and check overlap
         self.check_overlapping_regions()
@@ -340,6 +429,7 @@ class Recipe(QWidget):
         # if some ingredient change atribute data/insn => refresh (not patching)
         active_index = self.disassembler.currentIndex()
         self.disassembler.refresh_tab_asmview(active_index)
+        self.push_highlights_to_view()
 
         # if auto patch is checked, it will be cook
         if self.chk_auto_patch.isChecked():
@@ -437,63 +527,66 @@ class Recipe(QWidget):
         active_tab = self.disassembler.currentIndex()
         self.disassembler.clear_tab_asmview(active_tab)
         DeobfuscateUtils.reset(start_region, end_region)
-        self.save_bookmarks()
 
-        # delete manual region
-        if 0 < index <= self.count_manual_bookmark:
+        is_manual = 0 < index <= self.count_manual_bookmark
+        if is_manual:
             self.count_manual_bookmark -= 1
-            self.save_bookmarks()
         else:
-            # delete manual scanning region if ingredient found, so when cooking those regions not patching
-            # Iterate backwards to safely pop from list found obfuscated region
+            # drop matching scanning region from obfuscated_regions so cook won't re-patch it
             for i in range(len(self.obfuscated_regions) - 1, -1, -1):
                 list_regions = self.obfuscated_regions[i]
                 for j in range(len(list_regions) - 1, -1, -1):
                     r = list_regions[j]
-                    # Check match logic (matches any sub-region boundary logic from original code)
-                    matched = False
-                    for k in range(len(r.regions)):
-                        if r.regions[k].start_ea == start_region and r.regions[k].end_ea == end_region:
-                            matched = True
-                            break
-
-                    if matched:
-                        # Calculate total bounds for this group to reset
-                        start_region = min(reg.start_ea for reg in r.regions)
-                        end_region = max(reg.end_ea for reg in r.regions)
-                        DeobfuscateUtils.reset(start_region, end_region)
-                        print(f"[Sharingan] Exclude region: {hex(start_region)} {hex(end_region)}")
+                    if any(p.start_ea == start_region and p.end_ea == end_region for p in r.regions):
+                        bnd_s = min(p.start_ea for p in r.regions)
+                        bnd_e = max(p.end_ea for p in r.regions)
+                        DeobfuscateUtils.reset(bnd_s, bnd_e)
+                        print(f"[Sharingan] Exclude region: {hex(bnd_s)} {hex(bnd_e)}")
                         list_regions.pop(j)
-                        return
+                        break
 
-    # check region exist in bookmark or not
+        # drop HINT/OVERLAP entries covered by the resolved range
+        self.registry.remove_where(
+            lambda x: x.kind in (RegionKind.HINT, RegionKind.OVERLAP)
+            and x.start_ea >= start_region and x.end_ea <= end_region
+        )
+        self.sync_bookmarks_to_registry()
+        self.save_bookmarks()
+        self.push_highlights_to_view()
+
+    # check overlap with any bookmark in given index range; returns matching index or False
+    # uses half-open interval semantics [start, end) — overlap iff a.start < b.end and b.start < a.end
     def check_exist_bookmark(self, start_index_bookmark, end_index_bookmark, start_ea, end_ea):
         for index in range(start_index_bookmark, end_index_bookmark):
             start_region, end_region = self.parse_start_end_region(index)
-            if start_region <= start_ea <= end_region and start_region <= end_ea <= end_region:
+            # skip label rows ("Manual" / "Scanning") which parse to (0, 0)
+            if start_region == 0 and end_region == 0:
+                continue
+            if start_ea < end_region and start_region < end_ea:
                 return index
         return False
 
     # add region to bookmark
     def append_bookmark(self, start_ea, end_ea, hint, is_scan=False):
         ea_hint = f"{hex(start_ea)} - {hex(end_ea)} - {hint}"
-        # scanning region
+        # check overlap only within the same section (manual or scanning); the two are independent
         if is_scan:
-            # skip two label header
-            start_index_bookmark = self.count_manual_bookmark + 2
-            end_index_bookmark = self.cmb_bookmark.count()
-            if self.check_exist_bookmark(start_index_bookmark, end_index_bookmark, start_ea, end_ea):
-                print(f"[Sharingan] Duplicate region - {hex(start_ea)} - {hex(end_ea)}")
-                return
-            self.cmb_bookmark.addItem(ea_hint)
-        # manual region
+            start_idx, end_idx = self.count_manual_bookmark + 2, self.cmb_bookmark.count()
         else:
-            if self.check_exist_bookmark(1, self.count_manual_bookmark + 1, start_ea, end_ea):
-                print(f"[Sharingan] Already bookmark - {hex(start_ea)} - {hex(end_ea)}")
-                return
+            start_idx, end_idx = 1, self.count_manual_bookmark + 1
+        if self.check_exist_bookmark(start_idx, end_idx, start_ea, end_ea):
+            msg = "Duplicate region" if is_scan else "Already bookmark"
+            print(f"[Sharingan] {msg} - {hex(start_ea)} - {hex(end_ea)}")
+            return
+
+        if is_scan:
+            self.cmb_bookmark.addItem(ea_hint)
+        else:
             self.count_manual_bookmark += 1
             self.cmb_bookmark.insertItem(self.count_manual_bookmark, ea_hint)
-            DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_BOOKMARK)
+            self.sync_bookmarks_to_registry()
+            self.save_bookmarks()
+            idaapi.refresh_idaview_anyway()
 
     # this method is called when selecting from cmb_bookmark
     def disassemble_range_addr(self, index):
@@ -544,17 +637,17 @@ class Recipe(QWidget):
 
         return has_overlap
 
-    # highlight overlap by red
+    # register overlap intervals; renderer paints them
     def highlight_overlapping(self):
         for start_ea, end_ea in self.overlapping_regions:
-            DeobfuscateUtils.color_range(start_ea, end_ea, Color.BG_OVERLAPPING)
+            self.registry.add(Region(start_ea, end_ea, RegionKind.OVERLAP))
 
-    #highlight background obfuscated region by green
+    # register obfuscated sub-regions as hint; renderer paints them
     def highlight_hint(self):
         for list_regions in self.obfuscated_regions:
             for r in list_regions:
                 for reg in r.regions:
-                    DeobfuscateUtils.color_range(reg.start_ea, reg.end_ea, Color.BG_HINT)
+                    self.registry.add(Region(reg.start_ea, reg.end_ea, RegionKind.HINT, r.name))
 
     def highlight_region(self):
         self.highlight_hint()
@@ -562,7 +655,11 @@ class Recipe(QWidget):
 
     # cook decryption for string mode
     def cook_strings(self):
-        selection, decrypted_values = self.preview_decryption()
+        result = self.preview_decryption()
+        if not result:
+            return
+
+        selection, decrypted_values = result
         if not decrypted_values:
             print("[Sharingan] No valid strings selected for cooking.")
             return
@@ -615,9 +712,6 @@ class Recipe(QWidget):
                         if index_bookmark:
                             self.cmb_bookmark.removeItem(index_bookmark)
 
-                        if index_bookmark:
-                            self.cmb_bookmark.removeItem(index_bookmark)
-
                         # patching
                         patch_bytes = bytes(reg.patch_bytes)
                         DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
@@ -625,82 +719,75 @@ class Recipe(QWidget):
                         DeobfuscateUtils.del_items(start_ea, reg.obfus_size)
                         DeobfuscateUtils.mark_as_code(start_ea, end_ea)
 
-                        # color region
-                        # raw insn equal 1 insn
+                        # registry paints the patched range; hidden range still drives folding for NOP holes
+                        self.registry.add(Region(start_ea, end_ea, RegionKind.PATCHED, reg.comment))
+
                         if DeobfuscateUtils.is_all_nop(patch_bytes):
-                            idaapi.del_item_color(start_ea)
                             idaapi.add_hidden_range(start_ea, end_ea, reg.comment, '', '', Color.BG_PATCH_HIDDEN)
-                        # greater than 1 insn
                         else:
                             curr_ea = start_ea
-                            # because bytes contain nop not sequence bytes, it hidden range if found
                             while curr_ea < end_ea:
-                                # hidden range nop
                                 if DeobfuscateUtils.is_nop(curr_ea):
                                     nop_block_start = curr_ea
-
                                     while curr_ea < end_ea and DeobfuscateUtils.is_nop(curr_ea):
-                                        idaapi.del_item_color(curr_ea)
                                         next_ea = idaapi.next_head(curr_ea, end_ea)
                                         if next_ea == idaapi.BADADDR or next_ea >= end_ea:
                                             curr_ea = end_ea
                                             break
                                         curr_ea = next_ea
-
                                     idaapi.add_hidden_range(nop_block_start, curr_ea, 'NOP NOP NOP ...', '', '', Color.BG_PATCH_HIDDEN)
-                                # color patching instruction
                                 else:
-                                    idc.set_color(curr_ea, idc.CIC_ITEM, Color.BG_PATCH_HIDDEN)
                                     next_ea = idaapi.next_head(curr_ea, end_ea)
-                                    if next_ea == idaapi.BADADDR or next_ea >= end_ea:
-                                        curr_ea = end_ea
-                                    else:
-                                        curr_ea = next_ea
+                                    curr_ea = end_ea if next_ea == idaapi.BADADDR or next_ea >= end_ea else next_ea
 
                             self.hint_hook.insert_hint(start_ea, reg.comment)
 
         DeobfuscateUtils.refresh_view()
         active_index = self.disassembler.currentIndex()
         self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
+        self.sync_bookmarks_to_registry()
         self.save_bookmarks()
+        self.save_patched_regions()
+        idaapi.refresh_idaview_anyway()
         print('[Sharingan] Done cooking!!!')
 
-    # when selecting option exclusion, reset region into normal
+    # when selecting option exclusion, decide action by registry kind at cursor (no color reads)
     def exclude_patch_false_positive(self, cursor):
-        # get range address via cursor address
-        color_insn = idc.get_color(cursor, idc.CIC_ITEM)
-        if color_insn == Color.DEFCOLOR:
-            hidden_region = idaapi.get_hidden_range(cursor)
-            if hidden_region:
-                color_insn = idaapi.get_hidden_range(cursor).color
+        patched = self.registry.find_at(cursor, [RegionKind.PATCHED])
+        if patched:
+            # registry holds bounds; obfuscated_regions is consulted only for same-session cleanup
+            target = patched[0]
+            start_ea, end_ea = target.start_ea, target.end_ea
 
-        # remove hidden range or patching
-        if color_insn == Color.BG_PATCH_HIDDEN:
-            found = False
-            for i, list_regions in enumerate(self.obfuscated_regions):
-                for j, r in enumerate(list_regions):
-                    for k, reg in enumerate(r.regions):
-                        if reg.start_ea <= cursor < reg.end_ea:
-                            start_ea = min([x.start_ea for x in r.regions])
-                            end_ea = max([x.end_ea for x in r.regions])
+            if start_ea in self.hint_hook.dict_hints:
+                self.hint_hook.remove_hint(start_ea)
 
-                            #remove hint raw insn
-                            self.hint_hook.remove_hint(start_ea)
+            visitor = PatchedBytesVistor(start_ea, end_ea)
+            ida_bytes.visit_patched_bytes(start_ea, end_ea, visitor)
+            idaapi.auto_wait()
+            DeobfuscateUtils.reset(start_ea, end_ea)
 
-                            # revert region menu right click
-                            visitor = PatchedBytesVistor(start_ea, end_ea)
-                            ida_bytes.visit_patched_bytes(start_ea, end_ea, visitor)
-                            idaapi.auto_wait()
-                            DeobfuscateUtils.reset(start_ea, end_ea)
+            self.registry.remove_where(
+                lambda x: x.kind == RegionKind.PATCHED
+                and x.start_ea == start_ea and x.end_ea == end_ea
+            )
+            self.save_patched_regions()
 
-                            # remove from bookmark
-                            print(f"[Sharingan] Revert region: {hex(start_ea)} {hex(end_ea)}")
-                            list_regions.pop(j)
+            # drop matching ObfuscatedRegion from same-session metadata if present
+            for i in range(len(self.obfuscated_regions) - 1, -1, -1):
+                list_regions = self.obfuscated_regions[i]
+                for j in range(len(list_regions) - 1, -1, -1):
+                    r = list_regions[j]
+                    if any(p.start_ea <= cursor < p.end_ea for p in r.regions):
+                        list_regions.pop(j)
+                        break
 
-                            # refresh asmview
-                            active_index = self.disassembler.currentIndex()
-                            self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
-                            return
-        # remove hint and bookmark region
-        elif color_insn == Color.BG_HINT or color_insn == Color.BG_BOOKMARK:
+            active_index = self.disassembler.currentIndex()
+            self.disassembler.compare_tab_code(active_index, self.obfuscated_regions)
+            idaapi.refresh_idaview_anyway()
+            print(f"[Sharingan] Revert region: {hex(start_ea)} {hex(end_ea)}")
+            return
+
+        kinds = {r.kind for r in self.registry.find_at(cursor)}
+        if kinds & {RegionKind.HINT, RegionKind.MANUAL_BM, RegionKind.SCAN_BM}:
             self.resolve(cursor)

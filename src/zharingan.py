@@ -20,6 +20,8 @@ class PluginPanel(idaapi.PluginForm):
 
     def OnClose(self, form):
         flush_user_ignore_to_bundle()
+        if self.main_layout and getattr(self.main_layout, 'recipe', None):
+            self.main_layout.recipe.cleanup()
         PluginPanel.current_instance = None
 
 class Sharingan(idaapi.plugin_t):

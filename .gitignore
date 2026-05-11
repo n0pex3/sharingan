@@ -105,3 +105,6 @@ dmypy.json
 *.swo
 *~
 .DS_Store
+
+# AI
+.claude/

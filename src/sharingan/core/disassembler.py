@@ -22,47 +22,10 @@ from PySide6.QtWidgets import (
 
 from sharingan.core.StrFinder.string_finder import StringFinder
 from sharingan.core.stringfindertable import StringFinderTable
-from sharingan.core.utils import Color, DeobfuscateUtils, ManageStyleSheet
+from sharingan.core.utils import DeobfuscateUtils, ManageStyleSheet
 
 
 FILTER_ACTION_NAME = "sharingan:filter"
-
-
-# hook colored instruction of disassembler IDA to color in asm_view
-class DBHook(idaapi.IDB_Hooks):
-    def __init__(self, asm_view):
-        super().__init__()
-        self.asm_view = asm_view
-
-    def byte_patched(self, ea, old_value):
-        pass
-
-    # highlight hint in asm_view
-    def item_color_changed(self, ea, color):
-        idx_line = set()
-        # get index line of mode decompiler asm_view via address disassembler IDA
-        if self.asm_view.mode == "decompiler":
-            if ea in self.asm_view.eamap:
-                items = self.asm_view.eamap[ea]
-                for item in items:
-                    if item.ea == ea:
-                        coords = self.asm_view.cfunc.find_item_coords(item)
-                        if coords:
-                            _, y = coords
-                            idx_line.add(y)
-
-        # add address to list to highlight
-        if ea in self.asm_view.addr_asm_highlight:
-            self.asm_view.addr_asm_highlight.discard(ea)
-            self.asm_view.addr_pseudo_highlight ^= idx_line
-            self.asm_view.addr_asm_overlap.discard(ea)
-        elif color != Color.BG_BOOKMARK and color != Color.DEFCOLOR:
-            if color == Color.BG_HINT:
-                self.asm_view.addr_asm_highlight.add(ea)
-                if idx_line not in self.asm_view.addr_pseudo_highlight:
-                    self.asm_view.addr_pseudo_highlight |= idx_line
-            elif color == Color.BG_OVERLAPPING:
-                self.asm_view.addr_asm_overlap.add(ea)
 
 
 # color line in asm_view
@@ -194,9 +157,6 @@ class ASMView(idaapi.simplecustviewer_t):
         self.idx_bookmark = 0
         self.count_manual_bookmark = 0
 
-        self.db_hook = DBHook(self)
-        self.db_hook.hook()
-
     def Create(self, name_windows, mode):
         if not super().Create(name_windows):
             return False
@@ -219,8 +179,34 @@ class ASMView(idaapi.simplecustviewer_t):
 
     def OnClose(self):
         self.ui_hooks.unhook()
-        self.db_hook.unhook()
         idaapi.unregister_action(FILTER_ACTION_NAME)
+
+    # populate per-line highlight sets from interval lists pushed by recipe
+    def set_highlight_intervals(self, hint_intervals, overlap_intervals):
+        self.addr_asm_highlight.clear()
+        self.addr_asm_overlap.clear()
+        self.addr_pseudo_highlight.clear()
+        for s, e in hint_intervals:
+            self._fill_highlight(s, e, self.addr_asm_highlight, with_pseudo=True)
+        for s, e in overlap_intervals:
+            self._fill_highlight(s, e, self.addr_asm_overlap, with_pseudo=False)
+        self.Refresh()
+
+    def _fill_highlight(self, start_ea, end_ea, ea_set, with_pseudo):
+        ea = start_ea
+        while ea < end_ea and ea != idaapi.BADADDR:
+            ea_set.add(ea)
+            if with_pseudo and self.mode == "decompiler" and self.cfunc and self.eamap and ea in self.eamap:
+                for item in self.eamap[ea]:
+                    if item.ea == ea:
+                        coords = self.cfunc.find_item_coords(item)
+                        if coords:
+                            _, y = coords
+                            self.addr_pseudo_highlight.add(y)
+            nxt = idaapi.next_head(ea, end_ea)
+            if nxt == idaapi.BADADDR or nxt >= end_ea:
+                break
+            ea = nxt
 
     # mode disassembler
     def disassemble(self, start_ea, end_ea):
@@ -530,7 +516,10 @@ class DisassembleTab(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         main_tab = self
+
         while type(main_tab).__name__ != "Disassembler":
+            if main_tab is None:
+                break
             main_tab = main_tab.parent()
         self.main_tab = main_tab
 
@@ -821,3 +810,6 @@ class Disassembler(QTabWidget):
         self.tab_contents[index].asm_view.addr_asm_highlight.clear()
         self.tab_contents[index].asm_view.addr_pseudo_highlight.clear()
         self.tab_contents[index].asm_view.addr_asm_overlap.clear()
+
+    def update_tab_highlights(self, index, hint_intervals, overlap_intervals):
+        self.tab_contents[index].asm_view.set_highlight_intervals(hint_intervals, overlap_intervals)

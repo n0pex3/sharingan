@@ -12,11 +12,8 @@ class OperatorMode:
 
 
 class Color:
-    DEFCOLOR = 0xFFFFFFFF               # remove color
-    BG_PATCH_HIDDEN = 0x8BAB53          # green: patch/hidden range
-    BG_OVERLAPPING = 0x4A6AFB           # red: overlap
-    BG_HINT = 0x736E37                  # blue: hint
-    BG_BOOKMARK = 0x3059AD              # brown: bookmark
+    # only color still written to the DB; used as fold-color for hidden ranges
+    BG_PATCH_HIDDEN = 0x8BAB53
 
 
 # load stylesheet for components in plugin
@@ -122,7 +119,6 @@ class DeobfuscateUtils:
     def reset(start_addr, end_addr):
         next_addr = start_addr
         while next_addr < end_addr:
-            idaapi.del_item_color(next_addr)
             hr = idaapi.get_hidden_range(next_addr)
             if hr:
                 ba = ida_bytes.get_bytes(hr.start_ea, hr.end_ea - hr.start_ea)
@@ -134,18 +130,6 @@ class DeobfuscateUtils:
             # next_addr = idaapi.get_item_end(next_addr)
             next_addr = idaapi.next_head(next_addr, idaapi.BADADDR)
         DeobfuscateUtils.mark_as_code(start_addr, end_addr)
-
-    @staticmethod
-    def color_range(start_addr, end_addr, color):
-        next_addr = start_addr
-        while next_addr < end_addr:
-            idc.set_color(next_addr, idc.CIC_ITEM, color)
-            flags = idaapi.get_flags(next_addr)
-            if idaapi.is_code(flags):
-                size_item = idaapi.get_item_size(next_addr)
-                next_addr += size_item if size_item > 0 else 1
-            else:
-                next_addr += 1
 
     @staticmethod
     def is_all_nop(ba):
