@@ -1,4 +1,5 @@
 # Sharingan IDA Plugin
+> 🏅 Honorable Mention — [IDA Plugin Contest 2025](https://hex-rays.com/plugin-contest/2025)
 
 Assist IDA users with deobfuscation and string/data decryption through a drag-and-drop recipe workflow. Plugin was developed to streamline the reverse engineering workflow by bridging the gap between complex obfuscation and encrypted string through two core strategies:
 
